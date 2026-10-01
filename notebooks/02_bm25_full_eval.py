@@ -11,7 +11,7 @@
 #   arxiv-rag/data/eval_results/*.json ölçüm raporu
 
 # %%
-REPO_URL = "https://github.com/ismailyilmazz/arxiv-rag"   # kendi repo adresinle değiştir
+REPO_URL = "https://github.com/ismailyilmazz/arxiv-rag.git"   # kendi repo adresinle değiştir
 
 # %%
 import glob
