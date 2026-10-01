@@ -11,7 +11,6 @@ def make_row(pid, title, abstract):
 
 @pytest.fixture
 def small_db(tmp_path):
-    """Birkaç makalelik geçici veritabanı."""
     path = tmp_path / "papers.db"
     conn = connect(path)
     init_db(conn)

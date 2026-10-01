@@ -15,7 +15,6 @@ def _fake_llm(prompt, model, **kwargs):
 
 
 def test_build_and_evaluate_end_to_end(tmp_path, monkeypatch):
-    # Test havuzuna düşen kimlikleri bul ve küçük bir veritabanı kur
     test_ids = [f"2310.{i:05d}" for i in range(3000) if split_of(f"2310.{i:05d}") == "test"][:5]
     db = tmp_path / "papers.db"
     conn = connect(db)
@@ -36,14 +35,12 @@ def test_build_and_evaluate_end_to_end(tmp_path, monkeypatch):
     types = [(r["type"], r["lang"]) for r in rows]
     assert types.count(("title", "en")) == 3
     assert types.count(("synthetic", "en")) == 2 and types.count(("synthetic", "tr")) == 2
-    assert types.count(("offtopic", "en")) == 2          # tekrar eden soru atıldı
+    assert types.count(("offtopic", "en")) == 2
     assert all(split_of(r["target_id"]) == "test" for r in rows if r["target_id"])
 
-    # İkinci çalıştırma kaldığı yerden devam eder, hiçbir şeyi tekrar eklemez
     build_eval_set.main()
     assert len(out.read_text(encoding="utf-8").splitlines()) == len(rows)
 
-    # Aynı set ile değerlendirme uçtan uca çalışmalı
     monkeypatch.setattr(evaluate.config, "RESULTS_DIR", tmp_path / "results")
     monkeypatch.setattr(sys, "argv", ["x", "--db", str(db), "--queries", str(out)])
     evaluate.main()
@@ -85,4 +82,4 @@ def test_redo_synthetic_keeps_other_rows(tmp_path, monkeypatch):
     synth = [r["query"] for r in rows if r["type"] == "synthetic"]
     assert synth.count("learning to pick up objects") == 2 and len(synth) == 4
     assert sum(r["type"] == "title" for r in rows) == 3
-    assert sum(r["type"] == "offtopic" for r in rows) == 4   # dil başına 2, ikisi de korundu
+    assert sum(r["type"] == "offtopic" for r in rows) == 4

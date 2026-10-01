@@ -1,11 +1,3 @@
-"""Kaggle'da üretilen parquet dosyasını SQLite deposuna yükler.
-
-Dosya parça parça okunur. Böylece 30 binlik örnek de, 3 milyonluk tam korpus da
-aynı betikle ve belleği şişirmeden yüklenir.
-
-Kullanım (proje kökünden):
-    python -m scripts.load_sqlite data/dev_sample.parquet
-"""
 import argparse
 import time
 from pathlib import Path
@@ -41,7 +33,6 @@ def main() -> None:
         print(f"  {done:,} / {total:,}", end="\r")
     print(f"\nYükleme bitti ({time.perf_counter() - start:.1f} sn)")
 
-    # Kontrol: toplam sayı ve linki doğru üretilen rastgele 3 makale
     count = conn.execute("SELECT COUNT(*) FROM papers").fetchone()[0]
     print(f"Depodaki toplam makale: {count:,}  ({args.db})")
     for r in conn.execute("SELECT id, title FROM papers ORDER BY RANDOM() LIMIT 3"):

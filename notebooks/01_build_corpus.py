@@ -1,17 +1,3 @@
-# %% [markdown]
-# # Adım 1: arXiv korpusunu oluştur (tüm arXiv)
-#
-# Bu dosya Kaggle Notebook'ta çalışır. Veri seti Kaggle'ın içinde durduğu için
-# hiçbir şey indirmen gerekmiyor.
-#
-# Hazırlık: Notebook'un sağ panelinde "Add Input" ile
-# "Cornell-University/arxiv" veri setini ekle.
-#
-# Çıktılar (/kaggle/working altında):
-#   corpus.parquet      tüm makaleler (sunucuda kullanılacak)
-#   dev_sample.parquet  rastgele alt küme (kendi bilgisayarında geliştirmek için)
-#   stats.json          sayımlar
-
 # %%
 import glob
 import json
@@ -24,7 +10,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 DEV_SAMPLE_SIZE = 30_000
-CHUNK = 200_000   # bu kadar kayıt birikince diske yazılır, bellek şişmez
+CHUNK = 200_000
 SEED = 42
 OUT = "/kaggle/working"
 
@@ -41,20 +27,15 @@ SCHEMA = pa.schema([(name, pa.string()) for name in (
 # %%
 _WS = re.compile(r"\s+")
 
-
 def clean(text):
-    """Satır sonlarını ve fazla boşlukları tek boşluğa indirir."""
     return _WS.sub(" ", text or "").strip()
 
-
 def first_version_date(versions):
-    """İlk sürümün tarihi. Örnek girdi: 'Mon, 2 Apr 2007 19:18:42 GMT'"""
     try:
         created = versions[0]["created"]
         return datetime.strptime(created, "%a, %d %b %Y %H:%M:%S %Z").date().isoformat()
     except (IndexError, KeyError, TypeError, ValueError):
         return None
-
 
 # %%
 rng = random.Random(SEED)
@@ -64,12 +45,10 @@ seen_ids = set()
 kept = total = skipped_dup = skipped_empty = 0
 by_primary, by_year, by_group = Counter(), Counter(), Counter()
 
-
 def flush():
     if buffer:
         writer.write_table(pa.Table.from_pylist(buffer, schema=SCHEMA))
         buffer.clear()
-
 
 with open(SNAPSHOT, encoding="utf-8") as f:
     for line in f:
@@ -93,7 +72,6 @@ with open(SNAPSHOT, encoding="utf-8") as f:
             "abstract": abstract,
             "authors": clean(r.get("authors")),
             "categories": " ".join(cats),
-            # Varsayım: listedeki ilk kategori birincil kategoridir.
             "primary_category": cats[0],
             "published": published,
             "updated": r.get("update_date"),
@@ -103,10 +81,9 @@ with open(SNAPSHOT, encoding="utf-8") as f:
         buffer.append(row)
         kept += 1
         by_primary[cats[0]] += 1
-        by_group[cats[0].split(".")[0]] += 1   # cs.CL -> cs, hep-th -> hep-th
+        by_group[cats[0].split(".")[0]] += 1
         by_year[published[:4] if published else "bilinmiyor"] += 1
 
-        # Rezervuar örneklemesi: tüm makaleler arasından eşit olasılıklı 30 bin
         if len(dev_sample) < DEV_SAMPLE_SIZE:
             dev_sample.append(row)
         else:
@@ -126,7 +103,6 @@ print(f"\nSnapshot'taki kayıt: {total:,}")
 print(f"Korpusa giren     : {kept:,}  (tekrar: {skipped_dup:,}, boş: {skipped_empty:,})")
 
 # %%
-# Karar vermek için sayımlar. Bellek hesabı bir tahmindir, ölçüm değil.
 stats = {
     "snapshot_records": total,
     "corpus_records": kept,

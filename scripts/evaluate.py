@@ -1,12 +1,3 @@
-"""Bir arama yöntemini değerlendirme setiyle ölçer.
-
-Sorgular tür ve dile göre gruplanır (title/en, synthetic/en, synthetic/tr).
-Konu dışı sorguların doğru cevabı olmadığı için onlarda sadece en iyi skor
-kaydedilir. Bu skorlar Adım 4'teki bekçinin hammaddesi olacak.
-
-Kullanım (proje kökünden):
-    python -m scripts.evaluate --method bm25
-"""
 import argparse
 import json
 import statistics
@@ -18,7 +9,6 @@ from core import config, search_bm25
 from core.db import connect
 from core.metrics import rank_of, summarize
 
-# Adım 3'te "dense" ve "hybrid" buraya eklenecek
 METHODS = {"bm25": search_bm25.search}
 
 
@@ -36,14 +26,15 @@ def main() -> None:
     with open(args.queries, encoding="utf-8") as f:
         queries = [json.loads(line) for line in f if line.strip()]
 
-    # Doğru cevabı bu veritabanında olmayan sorgular ölçülemez, sayısını raporla
     targets = {q["target_id"] for q in queries if q["target_id"]}
     present = {r[0] for r in conn.execute(
         f"SELECT id FROM papers WHERE id IN ({','.join('?' * len(targets))})", list(targets))}
     missing = targets - present
 
     groups, offtopic_scores, latencies = {}, {}, []
-    for q in queries:
+    for i, q in enumerate(queries, start=1):
+        if i % 25 == 0 or i == len(queries):
+            print(f"  {i}/{len(queries)} sorgu", end="\r", flush=True)
         if q["target_id"] in missing:
             continue
         start = time.perf_counter()

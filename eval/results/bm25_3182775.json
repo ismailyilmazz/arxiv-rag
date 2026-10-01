@@ -1,0 +1,32 @@
+{
+  "method": "bm25",
+  "corpus_size": 3182775,
+  "queries_file": "queries.jsonl",
+  "created_at": "2026-10-01T17:15:43+00:00",
+  "missing_targets": 0,
+  "median_latency_ms": 1453.7,
+  "groups": {
+    "synthetic/en": {
+      "n": 150,
+      "hit@1": 0.66,
+      "hit@10": 0.84,
+      "mrr@10": 0.7153
+    },
+    "synthetic/tr": {
+      "n": 150,
+      "hit@1": 0.0533,
+      "hit@10": 0.1267,
+      "mrr@10": 0.0715
+    },
+    "title/en": {
+      "n": 300,
+      "hit@1": 0.8533,
+      "hit@10": 0.9467,
+      "mrr@10": 0.8878
+    }
+  },
+  "offtopic_top1_score": {
+    "offtopic/en": 22.309,
+    "offtopic/tr": 13.742
+  }
+}

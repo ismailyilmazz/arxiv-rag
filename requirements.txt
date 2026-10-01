@@ -1,9 +1,6 @@
-# Her adımda ihtiyaç olan paketler buraya eklenir.
-# Adım 1
 pandas==3.0.2
 pyarrow==25.0.1
 python-dotenv==1.2.2
 pytest==9.1.1
-# Adım 2
 openai==3.22.1
 scikit-learn==1.8.0

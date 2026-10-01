@@ -7,46 +7,62 @@ kağıdı taslağı üretir. Makale linkleri arXiv'in özet sayfasına yönlendi
 ## Klasör yapısı
 
 ```
-core/         ortak kod: ayarlar, arXiv kimlikleri, veritabanı
-scripts/      komut satırından çalışan işler (yükleme, değerlendirme)
-notebooks/    Kaggle'da çalışan ağır işler (korpus, embedding)
-eval/         değerlendirme seti (git'e girer, ölçümler hep aynı sete göre yapılır)
-tests/        birim testleri
-data/         veriler (repoya girmez)
-legacy/       ders projesinin ilk hali (sadece referans için)
+core/          ortak kod: ayarlar, arXiv kimlikleri, veritabanı, arama, metrikler
+scripts/       komut satırından çalışan işler (yükleme, değerlendirme)
+notebooks/     Kaggle'da çalışan ağır işler (korpus, tam korpus ölçümü)
+eval/          değerlendirme seti ve ölçüm raporları
+tests/         birim testleri
+data/          veriler (repoya girmez)
 ```
 
 ## Kurulum (Windows)
 
 ```
-python -m venv .venv
-.venv\Scripts\activate
+python -m venv venv
+venv\Scripts\activate
 pip install -r requirements.txt
-copy .env.example .env
 pytest
+```
+
+Proje kökünde bir `.env` dosyası oluştur:
+
+```
+LLM_API_KEY=
+LLM_BASE_URL=https://api.groq.com/openai/v1
+LLM_MODEL=openai/gpt-oss-120b
+LLM_MODEL_FAST=openai/gpt-oss-20b
+HF_TOKEN=
+HF_REPO_ID=
+ARXIV_CONTACT_EMAIL=
 ```
 
 ## Adım 1: Korpus
 
-1. Kaggle'da yeni bir Notebook aç, sağ panelden "Add Input" ile `Cornell-University/arxiv` veri setini ekle.
-2. `notebooks/01_build_corpus.py` içeriğini hücrelere yapıştır (`# %%` satırları hücre sınırıdır) ve çalıştır.
-3. Çıktı panelinden `dev_sample.parquet` ve `stats.json` dosyalarını indirip `data/` klasörüne koy.
-4. Yerelde depoyu oluştur:
+1. Kaggle'da yeni bir notebook aç, "Add Input" ile `Cornell-University/arxiv` veri setini ekle.
+2. `notebooks/01_build_corpus.py` içeriğini yapıştır ve çalıştır, ardından "Save Version" ile kaydet.
+3. Çıktıdan `dev_sample.parquet` ve `stats.json` dosyalarını indirip `data/` klasörüne koy.
+4. Yerel veritabanını oluştur:
 
 ```
 python -m scripts.load_sqlite data/dev_sample.parquet
 ```
 
-`corpus.parquet` tüm arXiv'i içerdiği için büyük, şimdilik Kaggle'da kalıyor. Sunucuya Adım 7'de taşınacak.
-
 ## Adım 2: Değerlendirme seti ve BM25
 
 ```
-pip install -r requirements.txt
-pytest
 python -m scripts.build_eval_set
 python -m scripts.evaluate --method bm25
 ```
 
-Değerlendirme seti `eval/queries.jsonl` dosyasına yazılır ve git'e girer.
-Resmi ölçüm Kaggle'da tam korpusla yapılır: `notebooks/02_bm25_full_eval.py`.
+Tam korpus ölçümü Kaggle'da yapılır: `notebooks/02_bm25_full_eval.py`.
+Raporlar `eval/results/` klasörüne yazılır.
+
+## Ölçümler
+
+Değerlendirme seti v1 (700 sorgu), tam korpus (3.182.775 makale):
+
+| yöntem | grup | hit@1 | hit@10 | MRR@10 | ortanca gecikme |
+|---|---|---|---|---|---|
+| BM25 | title/en | 0,853 | 0,947 | 0,888 | 1.454 ms |
+| BM25 | synthetic/en | 0,660 | 0,840 | 0,715 | |
+| BM25 | synthetic/tr | 0,053 | 0,127 | 0,072 | |

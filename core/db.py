@@ -1,12 +1,3 @@
-"""Makale deposu: SQLite tablosu + FTS5 tam metin arama indeksi.
-
-Neden FTS5: SQLite'ın içinde gelen, BM25 ile sıralama yapan bir arama motoru.
-Ek bir servis kurmaya gerek kalmıyor.
-
-Neden porter tokenizer: "networks" ile "network" aynı köke iner.
-Aynı tokenizer hem makalelere hem sorgulara uygulandığı için eski projedeki
-"eğitimde temizlenip sorguda temizlenmeme" hatası burada oluşamaz.
-"""
 import sqlite3
 from pathlib import Path
 from typing import Iterable
@@ -18,14 +9,14 @@ COLUMNS = (
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS papers (
-    pk               INTEGER PRIMARY KEY,   -- FTS5 bu sabit sayıya bağlanır
-    id               TEXT NOT NULL UNIQUE,  -- arXiv kimliği: 2310.01234 veya hep-th/9901001
+    pk               INTEGER PRIMARY KEY,
+    id               TEXT NOT NULL UNIQUE,
     title            TEXT NOT NULL,
     abstract         TEXT NOT NULL,
     authors          TEXT,
-    categories       TEXT,                  -- boşlukla ayrılmış: "cs.CL cs.LG"
+    categories       TEXT,
     primary_category TEXT,
-    published        TEXT,                  -- ilk sürüm tarihi, YYYY-MM-DD
+    published        TEXT,
     updated          TEXT,
     license          TEXT,
     doi              TEXT
@@ -36,8 +27,6 @@ CREATE VIRTUAL TABLE IF NOT EXISTS papers_fts USING fts5(
     content='papers', content_rowid='pk',
     tokenize='porter unicode61'
 );
-
--- Tablo değiştikçe arama indeksi kendiliğinden güncel kalsın
 CREATE TRIGGER IF NOT EXISTS papers_ai AFTER INSERT ON papers BEGIN
     INSERT INTO papers_fts(rowid, title, abstract) VALUES (new.pk, new.title, new.abstract);
 END;
@@ -74,10 +63,5 @@ def init_db(conn: sqlite3.Connection) -> None:
 
 
 def upsert_papers(conn: sqlite3.Connection, rows: Iterable[tuple]) -> None:
-    """Satırlar COLUMNS sırasında olmalı. Aynı kimlik varsa kayıt güncellenir.
-
-    Bu fonksiyon hem ilk toplu yüklemede hem de ileride OAI-PMH ile gelen
-    günlük güncellemelerde kullanılacak.
-    """
     with conn:
         conn.executemany(_UPSERT, rows)

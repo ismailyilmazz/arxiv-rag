@@ -20,7 +20,6 @@ def test_search_stems_plural_forms(tmp_path):
         _row("2310.00001", "Graph neural networks for traffic", "We forecast traffic."),
         _row("2310.00002", "Cooking with robots", "A kitchen robot."),
     ])
-    # Sorgu tekil, makalede çoğul: porter tokenizer ikisini aynı köke indirir
     assert _search(conn, "network") == ["2310.00001"]
     assert _search(conn, "robot") == ["2310.00002"]
 
@@ -31,5 +30,5 @@ def test_upsert_keeps_index_in_sync(tmp_path):
     upsert_papers(conn, [_row("2310.00001", "Old title about graphs", "x")])
     upsert_papers(conn, [_row("2310.00001", "New title about transformers", "x")])
     assert conn.execute("SELECT COUNT(*) FROM papers").fetchone()[0] == 1
-    assert _search(conn, "graphs") == []            # eski başlık indeksten silindi
+    assert _search(conn, "graphs") == []
     assert _search(conn, "transformer") == ["2310.00001"]

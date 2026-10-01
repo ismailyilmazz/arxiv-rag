@@ -1,17 +1,13 @@
-# Gizli bilgiler
 .env
 
-# Sanal ortam
 venv/
 .venv/
 
-# Veri ve üretilen dosyalar (repoya girmez)
 data/
 *.db
 *.parquet
 *.npy
 
-# Python
 __pycache__/
 *.pyc
 .pytest_cache/

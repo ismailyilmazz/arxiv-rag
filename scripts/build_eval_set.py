@@ -1,19 +1,3 @@
-"""Değerlendirme setini oluşturur: eval/queries.jsonl
-
-Üç tür sorgu üretilir:
-  title     : makalenin başlığı sorgu olur, doğru cevap o makaledir.
-  synthetic : LLM makalenin özetinden bir araştırmacının yazacağı kısa bir sorgu
-              üretir. Aynı sorgunun İngilizce ve Türkçe hali birlikte üretilir,
-              böylece iki dil arasındaki fark adil şekilde ölçülür.
-  offtopic  : akademiyle ilgisi olmayan günlük sorular. Doğru cevabı yoktur.
-              Adım 4'teki bekçi bunlarla eğitilecek.
-
-Makaleler sadece test havuzundan seçilir (core/splits.py).
-Betik yarıda kesilirse tekrar çalıştırıldığında kaldığı yerden devam eder.
-
-Kullanım (proje kökünden):
-    python -m scripts.build_eval_set
-"""
 import argparse
 import json
 import random
@@ -56,7 +40,6 @@ def append(path: Path, row: dict) -> None:
 
 
 def title_overlap(query: str, title: str) -> float:
-    """Sorgu kelimelerinin yüzde kaçı başlıkta da geçiyor (0 ile 1 arası)."""
     q = set(re.findall(r"\w+", query.lower()))
     t = set(re.findall(r"\w+", title.lower()))
     return len(q & t) / len(q) if q else 0.0
@@ -86,7 +69,7 @@ def main() -> None:
     args = p.parse_args()
 
     if args.n_synthetic or args.n_offtopic:
-        llm._client()  # anahtar eksikse en başta net bir hata ver
+        llm._client()
     args.out.parent.mkdir(parents=True, exist_ok=True)
     if args.redo_synthetic and args.out.exists():
         with open(args.out, encoding="utf-8") as f:
@@ -96,7 +79,6 @@ def main() -> None:
     done = load_done(args.out)
     conn = connect(args.db)
 
-    # Test havuzundaki makaleler, her çalıştırmada aynı sırayla
     pool = sorted(r["id"] for r in conn.execute("SELECT id FROM papers") if split_of(r["id"]) == "test")
     rng = random.Random(args.seed)
     rng.shuffle(pool)
@@ -105,14 +87,12 @@ def main() -> None:
     def paper(pid):
         return conn.execute("SELECT title, abstract FROM papers WHERE id = ?", (pid,)).fetchone()
 
-    # 1) Başlık sorguları: LLM gerekmez
     for pid in pool[: args.n_title]:
         qid = f"title-{pid}"
         if qid not in done:
             append(args.out, {"qid": qid, "type": "title", "lang": "en",
                               "query": paper(pid)["title"], "target_id": pid})
 
-    # 2) Sentetik sorgular: makale başına tek LLM çağrısı, iki dil birden
     synth_ids = pool[: args.n_synthetic]
     for i, pid in enumerate(synth_ids, start=1):
         if f"synthetic-en-{pid}" in done:
@@ -123,7 +103,7 @@ def main() -> None:
                 SYNTH_PROMPT.format(title=row["title"], abstract=row["abstract"][:1500]),
                 model=args.synthetic_model,
             )
-        except Exception as e:  # tek bir hatalı cevap bütün işi durdurmasın
+        except Exception as e:
             print(f"  atlandı {pid}: {e}")
             continue
         if not valid_synthetic(item, row["title"]):
@@ -134,7 +114,6 @@ def main() -> None:
                               "query": item[lang].strip(), "target_id": pid})
         print(f"  sentetik {i}/{len(synth_ids)}", end="\r")
 
-    # 3) Konu dışı sorgular: dil başına tek çağrı
     for lang, language in (("en", "English"), ("tr", "Turkish")):
         if args.n_offtopic == 0 or f"offtopic-{lang}-0" in done:
             continue
@@ -145,7 +124,6 @@ def main() -> None:
             append(args.out, {"qid": f"offtopic-{lang}-{j}", "type": "offtopic", "lang": lang,
                               "query": q, "target_id": None})
 
-    # Özet
     with open(args.out, encoding="utf-8") as f:
         rows = [json.loads(line) for line in f if line.strip()]
     counts = {}

@@ -4,7 +4,6 @@ from core.search_bm25 import search, to_fts_query
 
 
 def test_query_is_sanitized():
-    # Tırnak, parantez, iki nokta ve AND/NOT gibi FTS5 operatörleri hata vermemeli
     q = to_fts_query('Graph "neural" (networks) AND traffic: NOT forecasting*')
     assert q == '"graph" OR "neural" OR "networks" OR "traffic" OR "forecasting"'
 
@@ -21,7 +20,7 @@ def test_finds_right_paper(small_db):
     conn, _ = small_db
     results = search(conn, "robot grasping", k=3)
     assert results[0][0] == "2310.00002"
-    assert results[0][1] > 0                      # skor pozitif, büyük olan daha alakalı
+    assert results[0][1] > 0
 
 
 def test_plural_and_singular_match(small_db):
