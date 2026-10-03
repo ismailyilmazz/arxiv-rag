@@ -1,40 +1,40 @@
 {
-  "method": "hybrid",
+  "method": "lang-rule",
   "model": "granite-311m-384",
   "corpus_size": 3182775,
   "searched_docs": 3182775,
   "queries_file": "queries.jsonl",
-  "created_at": "2026-10-03T14:09:00+00:00",
+  "created_at": "2026-10-03T14:27:38+00:00",
   "missing_targets": 0,
-  "median_latency_ms": 1980.2,
+  "median_latency_ms": 597.1,
   "groups": {
     "manual/tr": {
       "n": 30,
-      "hit@1": 0.1,
-      "hit@10": 0.3667,
-      "mrr@10": 0.1569
+      "hit@1": 0.1333,
+      "hit@10": 0.4333,
+      "mrr@10": 0.1966
     },
     "synthetic/en": {
       "n": 150,
       "hit@1": 0.6867,
-      "hit@10": 0.9267,
-      "mrr@10": 0.7718
+      "hit@10": 0.92,
+      "mrr@10": 0.771
     },
     "synthetic/tr": {
       "n": 150,
-      "hit@1": 0.08,
-      "hit@10": 0.3533,
-      "mrr@10": 0.1613
+      "hit@1": 0.1733,
+      "hit@10": 0.4067,
+      "mrr@10": 0.2356
     },
     "title/en": {
       "n": 300,
       "hit@1": 0.91,
-      "hit@10": 0.9867,
-      "mrr@10": 0.9396
+      "hit@10": 0.9833,
+      "mrr@10": 0.9398
     }
   },
   "offtopic_top1_score": {
-    "offtopic/en": 0.03,
-    "offtopic/tr": 0.017
+    "offtopic/en": 0.029,
+    "offtopic/tr": 0.845
   }
 }

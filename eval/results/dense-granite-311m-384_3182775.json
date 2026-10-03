@@ -4,31 +4,37 @@
   "corpus_size": 3182775,
   "searched_docs": 3182775,
   "queries_file": "queries.jsonl",
-  "created_at": "2026-10-03T05:23:37+00:00",
+  "created_at": "2026-10-03T13:39:46+00:00",
   "missing_targets": 0,
-  "median_latency_ms": 245.4,
+  "median_latency_ms": 496.7,
   "groups": {
+    "manual/tr": {
+      "n": 30,
+      "hit@1": 0.2,
+      "hit@10": 0.4333,
+      "mrr@10": 0.2659
+    },
     "synthetic/en": {
       "n": 150,
       "hit@1": 0.7,
       "hit@10": 0.8933,
-      "mrr@10": 0.7617
+      "mrr@10": 0.7614
     },
     "synthetic/tr": {
       "n": 150,
       "hit@1": 0.1733,
-      "hit@10": 0.4133,
-      "mrr@10": 0.2322
+      "hit@10": 0.4067,
+      "mrr@10": 0.2336
     },
     "title/en": {
       "n": 300,
-      "hit@1": 0.93,
+      "hit@1": 0.9333,
       "hit@10": 0.99,
-      "mrr@10": 0.9523
+      "mrr@10": 0.954
     }
   },
   "offtopic_top1_score": {
     "offtopic/en": 0.868,
-    "offtopic/tr": 0.862
+    "offtopic/tr": 0.863
   }
 }

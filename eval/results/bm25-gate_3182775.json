@@ -1,12 +1,12 @@
 {
-  "method": "bm25",
+  "method": "bm25-gate",
   "model": null,
   "corpus_size": 3182775,
   "searched_docs": 3182775,
   "queries_file": "queries.jsonl",
-  "created_at": "2026-10-03T13:29:42+00:00",
+  "created_at": "2026-10-03T13:32:06+00:00",
   "missing_targets": 0,
-  "median_latency_ms": 1397.0,
+  "median_latency_ms": 126.7,
   "groups": {
     "manual/tr": {
       "n": 30,
@@ -18,23 +18,23 @@
       "n": 150,
       "hit@1": 0.66,
       "hit@10": 0.84,
-      "mrr@10": 0.7153
+      "mrr@10": 0.7156
     },
     "synthetic/tr": {
       "n": 150,
-      "hit@1": 0.0533,
-      "hit@10": 0.1267,
-      "mrr@10": 0.0715
+      "hit@1": 0.04,
+      "hit@10": 0.08,
+      "mrr@10": 0.0475
     },
     "title/en": {
       "n": 300,
       "hit@1": 0.8533,
-      "hit@10": 0.9467,
-      "mrr@10": 0.8878
+      "hit@10": 0.95,
+      "mrr@10": 0.8885
     }
   },
   "offtopic_top1_score": {
-    "offtopic/en": 22.309,
-    "offtopic/tr": 13.742
+    "offtopic/en": 21.192,
+    "offtopic/tr": 13.262
   }
 }
