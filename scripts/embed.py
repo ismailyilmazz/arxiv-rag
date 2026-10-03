@@ -19,19 +19,24 @@ def main() -> None:
     p.add_argument("--batch-size", type=int, default=128)
     p.add_argument("--max-seq-length", type=int, default=512)
     p.add_argument("--chunk", type=int, default=20_000)
+    p.add_argument("--shard", type=int, default=0)
+    p.add_argument("--num-shards", type=int, default=1)
     args = p.parse_args()
+    if not 0 <= args.shard < args.num_shards:
+        raise SystemExit("--shard, 0 ile --num-shards arasında olmalı.")
 
     conn = connect(args.db)
     if args.pks:
         pks = np.load(args.pks).astype(np.int64)
     else:
         pks = np.array([r[0] for r in conn.execute("SELECT pk FROM papers ORDER BY pk")], dtype=np.int64)
+    pks = pks[args.shard::args.num_shards]
 
     encoder = embeddings.Encoder(args.model, max_seq_length=args.max_seq_length)
     dim = encoder.encode_passages(["probe"]).shape[1]
     args.out_dir.mkdir(parents=True, exist_ok=True)
     vectors = np.lib.format.open_memmap(args.out_dir / "vectors.npy", mode="w+", dtype=np.float16, shape=(len(pks), dim))
-    print(f"{args.model}: {len(pks):,} makale, {dim} boyut -> {args.out_dir}")
+    print(f"{args.model}: {len(pks):,} makale, {dim} boyut, parça {args.shard + 1}/{args.num_shards} -> {args.out_dir}")
 
     start = time.perf_counter()
     for i in range(0, len(pks), args.chunk):

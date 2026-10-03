@@ -95,3 +95,48 @@ def test_embed_subset_and_evaluate(small_db, tmp_path, monkeypatch):
     evaluate.main()
     report = json.loads((results / "hybrid-e5-small_3.json").read_text(encoding="utf-8"))
     assert report["groups"]["synthetic/en"]["hit@1"] == 1.0
+
+
+def test_sharded_embedding_matches_single_run(small_db, tmp_path, monkeypatch):
+    conn, db = small_db
+    monkeypatch.setattr(embeddings, "Encoder", FakeEncoder)
+    from scripts import merge_vectors
+
+    single = tmp_path / "single"
+    monkeypatch.setattr(sys, "argv", ["x", "--model", "e5-small", "--db", str(db), "--out-dir", str(single)])
+    embed.main()
+
+    shard_dirs = []
+    for shard in range(2):
+        out = tmp_path / f"shard{shard}"
+        monkeypatch.setattr(sys, "argv", ["x", "--model", "e5-small", "--db", str(db), "--out-dir", str(out),
+                                          "--shard", str(shard), "--num-shards", "2"])
+        embed.main()
+        shard_dirs.append(str(out))
+
+    merged = tmp_path / "merged"
+    monkeypatch.setattr(sys, "argv", ["x", *shard_dirs, "--out-dir", str(merged)])
+    merge_vectors.main()
+
+    a, b = DenseIndex.load(single), DenseIndex.load(merged)
+    assert sorted(a.pks.tolist()) == sorted(b.pks.tolist())
+    assert b.meta["count"] == 3 and b.meta["shards"] == 2
+    query = FakeEncoder("e5-small").encode_queries(["robot grasping"])[0]
+    ra, rb = a.search(conn, query, k=3), b.search(conn, query, k=3)
+    assert [pid for pid, _ in ra] == [pid for pid, _ in rb]
+    assert np.allclose([s for _, s in ra], [s for _, s in rb], rtol=1e-5, atol=1e-7)
+
+
+def test_merge_rejects_mismatched_models(tmp_path, monkeypatch):
+    from scripts import merge_vectors
+
+    for name, model in (("a", "e5-small"), ("b", "granite-97m")):
+        d = tmp_path / name
+        d.mkdir()
+        np.save(d / "pks.npy", np.array([1 if name == "a" else 2]))
+        np.save(d / "vectors.npy", np.zeros((1, DIM), dtype=np.float16))
+        (d / "meta.json").write_text(json.dumps({"model": model, "hf_id": model, "dim": DIM,
+                                                  "max_seq_length": 512, "seconds": 1}))
+    monkeypatch.setattr(sys, "argv", ["x", str(tmp_path / "a"), str(tmp_path / "b"), "--out-dir", str(tmp_path / "m")])
+    with pytest.raises(SystemExit):
+        merge_vectors.main()

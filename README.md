@@ -57,6 +57,16 @@ python -m scripts.evaluate --method bm25
 Tam korpus ölçümü Kaggle'da yapılır: `notebooks/02_bm25_full_eval.py`.
 Raporlar `eval/results/` klasörüne yazılır.
 
+## Adım 3: Anlamsal arama
+
+Model seçimi Kaggle'da GPU ile yapılır: `notebooks/03_model_selection.py`.
+Seçilen modelle tam korpusun vektörleri iki GPU'da üretilir: `notebooks/04_full_embedding.py`.
+
+```
+python -m scripts.evaluate --method dense --vectors-dir <vektör klasörü>
+python -m scripts.evaluate --method hybrid --vectors-dir <vektör klasörü>
+```
+
 ## Ölçümler
 
 Değerlendirme seti v1 (700 sorgu), tam korpus (3.182.775 makale):
@@ -66,3 +76,16 @@ Değerlendirme seti v1 (700 sorgu), tam korpus (3.182.775 makale):
 | BM25 | title/en | 0,853 | 0,947 | 0,888 | 1.454 ms |
 | BM25 | synthetic/en | 0,660 | 0,840 | 0,715 | |
 | BM25 | synthetic/tr | 0,053 | 0,127 | 0,072 | |
+
+### Embedding modeli seçimi
+
+200 bin makalelik alt küme (değerlendirme setinin 300 hedef makalesi dahil), hit@10:
+
+| model | title/en | synthetic/en | synthetic/tr | vektör üretme hızı (T4) |
+|---|---|---|---|---|
+| multilingual-e5-small | 0,990 | 0,947 | 0,553 | 396 makale/sn |
+| granite-embedding-97m-multilingual-r2 | 1,000 | 0,980 | 0,427 | 350 makale/sn |
+| **granite-embedding-311m-multilingual-r2 (384 boyut)** | **1,000** | **0,993** | **0,620** | 127 makale/sn |
+
+Üreticinin kıyaslamasında e5-small'dan belirgin şekilde iyi görünen granite-97m, bu projenin
+Türkçe sorgu ile İngilizce makale eşleşmesinde en kötü sonucu verdi. Seçim granite-311m-384.
