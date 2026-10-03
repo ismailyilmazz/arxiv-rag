@@ -32,3 +32,27 @@ def test_plural_and_singular_match(small_db):
 def test_odd_inputs_do_not_crash(small_db, text):
     conn, _ = small_db
     assert isinstance(search(conn, text), list)
+
+
+def test_gate_never_uses_unknown_words(small_db):
+    from core.search_bm25 import build_term_df, gated_query
+    conn, _ = small_db
+    assert build_term_df(conn) > 0
+    q = gated_query(conn, "zzqx robot grasping policies reinforcement", gate=2)
+    gate_part = q.split(" AND ")[0]
+    assert "zzqx" not in gate_part and "zzqx" in q
+
+
+def test_gate_falls_back_when_few_known_words(small_db):
+    from core.search_bm25 import build_term_df, gated_query
+    conn, _ = small_db
+    build_term_df(conn)
+    assert " AND " not in gated_query(conn, "robot kavrama öğrenmesi", gate=2)
+
+
+def test_gated_search_finds_same_paper(small_db):
+    from core.search_bm25 import build_term_df
+    conn, _ = small_db
+    build_term_df(conn)
+    text = "reinforcement learning robot grasping policies"
+    assert search(conn, text, k=1, gate=2)[0][0] == search(conn, text, k=1)[0][0] == "2310.00002"

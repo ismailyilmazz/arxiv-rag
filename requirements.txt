@@ -4,3 +4,4 @@ python-dotenv==1.2.2
 pytest==9.1.1
 openai==3.22.1
 scikit-learn==1.8.0
+nltk==3.10.3

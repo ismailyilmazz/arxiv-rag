@@ -6,15 +6,20 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from core import config, search_bm25, search_hybrid
+from core.lang import is_turkish
 from core.db import connect
 from core.metrics import rank_of, summarize
 
-METHODS = ("bm25", "dense", "hybrid")
+METHODS = ("bm25", "bm25-gate", "dense", "hybrid", "hybrid-gate", "lang-rule")
+GATE = 2
 
 
-def build_search(method: str, vectors_dir, n_papers: int):
-    if method == "bm25":
-        return search_bm25.search, n_papers, None
+def build_search(method: str, vectors_dir, n_papers: int, conn):
+    gate = GATE if method in ("bm25-gate", "hybrid-gate", "lang-rule") else None
+    if gate and not search_bm25.has_term_df(conn):
+        raise SystemExit("term_df tablosu yok. Önce: python -m scripts.build_term_df")
+    if method in ("bm25", "bm25-gate"):
+        return (lambda c, text, k: search_bm25.search(c, text, k, gate=gate)), n_papers, None
     if vectors_dir is None:
         raise SystemExit(f"--method {method} için --vectors-dir gerekli.")
 
@@ -23,15 +28,26 @@ def build_search(method: str, vectors_dir, n_papers: int):
 
     index = DenseIndex.load(vectors_dir)
     encoder = Encoder(index.meta["model"], max_seq_length=index.meta["max_seq_length"])
+    model = index.meta["model"]
 
-    def dense(conn, text, k):
-        return index.search(conn, encoder.encode_queries([text])[0], k)
+    def dense(c, text, k):
+        return index.search(c, encoder.encode_queries([text])[0], k)
 
     if method == "dense":
-        return dense, len(index), index.meta["model"]
+        return dense, len(index), model
     if len(index) != n_papers:
         raise SystemExit("Hibrit arama için vektörler tüm korpusu kapsamalı. Alt kümede sadece dense ölçülür.")
-    return (lambda conn, text, k: search_hybrid.search(conn, text, k, dense)), len(index), index.meta["model"]
+
+    def hybrid(c, text, k):
+        return search_hybrid.search(c, text, k, dense, gate=gate)
+
+    if method in ("hybrid", "hybrid-gate"):
+        return hybrid, len(index), model
+
+    def rule(c, text, k):
+        return dense(c, text, k) if is_turkish(text) else hybrid(c, text, k)
+
+    return rule, len(index), model
 
 
 def main() -> None:
@@ -45,7 +61,7 @@ def main() -> None:
 
     conn = connect(args.db)
     n_papers = conn.execute("SELECT COUNT(*) FROM papers").fetchone()[0]
-    search, searched, model = build_search(args.method, args.vectors_dir, n_papers)
+    search, searched, model = build_search(args.method, args.vectors_dir, n_papers, conn)
     label = args.method if model is None else f"{args.method}-{model}"
     with open(args.queries, encoding="utf-8") as f:
         queries = [json.loads(line) for line in f if line.strip()]

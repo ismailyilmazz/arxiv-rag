@@ -698,3 +698,33 @@
 {"qid": "synthetic-tr-1407.6570", "type": "synthetic", "lang": "tr", "query": "mikroRNA veritabanı ağ önyargı analizi", "target_id": "1407.6570"}
 {"qid": "synthetic-en-2405.01113", "type": "synthetic", "lang": "en", "query": "synthetic data generation for monocular depth estimation using domain transfer", "target_id": "2405.01113"}
 {"qid": "synthetic-tr-2405.01113", "type": "synthetic", "lang": "tr", "query": "monoküler derinlik tahmini için alan aktarımıyla sentetik veri üretimi", "target_id": "2405.01113"}
+{"qid": "manual-tr-1603.02754", "type": "manual", "lang": "tr", "query": "xgboost gradient boosting orijinal makale", "target_id": "1603.02754"}
+{"qid": "manual-tr-1106.1813", "type": "manual", "lang": "tr", "query": "dengesiz verisetleri için smote oversampling", "target_id": "1106.1813"}
+{"qid": "manual-tr-1412.6980", "type": "manual", "lang": "tr", "query": "adam optimizer nasıl çalışır makalesi", "target_id": "1412.6980"}
+{"qid": "manual-tr-1502.03167", "type": "manual", "lang": "tr", "query": "batch normalization deep learning eğitim hızlandırma", "target_id": "1502.03167"}
+{"qid": "manual-tr-1207.0580", "type": "manual", "lang": "tr", "query": "dropout ile overfitting engelleme hinton", "target_id": "1207.0580"}
+{"qid": "manual-tr-1512.03385", "type": "manual", "lang": "tr", "query": "resnet skip connection deep residual learning", "target_id": "1512.03385"}
+{"qid": "manual-tr-1506.02640", "type": "manual", "lang": "tr", "query": "yolo gerçek zamanlı nesne tespiti", "target_id": "1506.02640"}
+{"qid": "manual-tr-1505.04597", "type": "manual", "lang": "tr", "query": "u-net medikal görüntü segmentasyonu", "target_id": "1505.04597"}
+{"qid": "manual-tr-2010.11929", "type": "manual", "lang": "tr", "query": "vision transformer vit makalesi", "target_id": "2010.11929"}
+{"qid": "manual-tr-2006.11239", "type": "manual", "lang": "tr", "query": "denoising diffusion modelleri ddpm orijinal makale", "target_id": "2006.11239"}
+{"qid": "manual-tr-1708.02002", "type": "manual", "lang": "tr", "query": "class imbalance için focal loss", "target_id": "1708.02002"}
+{"qid": "manual-tr-1301.3781", "type": "manual", "lang": "tr", "query": "word2vec kelime embeddingleri mikolov", "target_id": "1301.3781"}
+{"qid": "manual-tr-1409.0473", "type": "manual", "lang": "tr", "query": "bahdanau attention mekanizması seq2seq", "target_id": "1409.0473"}
+{"qid": "manual-tr-1706.03762", "type": "manual", "lang": "tr", "query": "attention is all you need transformer makalesi", "target_id": "1706.03762"}
+{"qid": "manual-tr-1810.04805", "type": "manual", "lang": "tr", "query": "bert bidirectional pretraining nlp", "target_id": "1810.04805"}
+{"qid": "manual-tr-2005.14165", "type": "manual", "lang": "tr", "query": "gpt3 few-shot learning", "target_id": "2005.14165"}
+{"qid": "manual-tr-2106.09685", "type": "manual", "lang": "tr", "query": "lora ile büyük dil modeli finetune etme", "target_id": "2106.09685"}
+{"qid": "manual-tr-2201.11903", "type": "manual", "lang": "tr", "query": "chain of thought prompting adım adım reasoning", "target_id": "2201.11903"}
+{"qid": "manual-tr-2203.02155", "type": "manual", "lang": "tr", "query": "rlhf human feedback ile model eğitme instructgpt", "target_id": "2203.02155"}
+{"qid": "manual-tr-2001.08361", "type": "manual", "lang": "tr", "query": "llm scaling laws openai", "target_id": "2001.08361"}
+{"qid": "manual-tr-2210.03629", "type": "manual", "lang": "tr", "query": "react prompting reasoning ve acting", "target_id": "2210.03629"}
+{"qid": "manual-tr-2005.11401", "type": "manual", "lang": "tr", "query": "belgelerden bilgi çekerek cevap üreten dil modeli", "target_id": "2005.11401"}
+{"qid": "manual-tr-2004.04906", "type": "manual", "lang": "tr", "query": "dpr dense passage retrieval question answering", "target_id": "2004.04906"}
+{"qid": "manual-tr-1908.10084", "type": "manual", "lang": "tr", "query": "sentence bert sbert ile cümle embedding", "target_id": "1908.10084"}
+{"qid": "manual-tr-2004.12832", "type": "manual", "lang": "tr", "query": "colbert late interaction vektör arama", "target_id": "2004.12832"}
+{"qid": "manual-tr-2307.03172", "type": "manual", "lang": "tr", "query": "llm uzun context unutma lost in the middle", "target_id": "2307.03172"}
+{"qid": "manual-tr-1603.09320", "type": "manual", "lang": "tr", "query": "hnsw algoritması approximate nearest neighbor", "target_id": "1603.09320"}
+{"qid": "manual-tr-2103.00020", "type": "manual", "lang": "tr", "query": "openai clip text image matching zero shot", "target_id": "2103.00020"}
+{"qid": "manual-tr-1707.06347", "type": "manual", "lang": "tr", "query": "ppo algoritması reinforcement learning", "target_id": "1707.06347"}
+{"qid": "manual-tr-1602.05629", "type": "manual", "lang": "tr", "query": "federated learning merkezi olmayan veriyle model eğitimi", "target_id": "1602.05629"}

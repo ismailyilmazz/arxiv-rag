@@ -140,3 +140,35 @@ def test_merge_rejects_mismatched_models(tmp_path, monkeypatch):
     monkeypatch.setattr(sys, "argv", ["x", str(tmp_path / "a"), str(tmp_path / "b"), "--out-dir", str(tmp_path / "m")])
     with pytest.raises(SystemExit):
         merge_vectors.main()
+
+
+def test_gated_methods_and_language_rule(small_db, tmp_path, monkeypatch):
+    from core.search_bm25 import build_term_df
+    conn, db = small_db
+    monkeypatch.setattr(embeddings, "Encoder", FakeEncoder)
+    queries = tmp_path / "queries.jsonl"
+    rows = [
+        {"qid": "a", "type": "synthetic", "lang": "en", "query": "reinforcement learning robot grasping policies",
+         "target_id": "2310.00002"},
+        {"qid": "b", "type": "manual", "lang": "tr", "query": "robot kavrama öğrenmesi grasping", "target_id": "2310.00002"},
+    ]
+    queries.write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n", encoding="utf-8")
+    results = tmp_path / "results"
+    monkeypatch.setattr(evaluate.config, "RESULTS_DIR", results)
+
+    monkeypatch.setattr(sys, "argv", ["x", "--method", "bm25-gate", "--db", str(db), "--queries", str(queries)])
+    with pytest.raises(SystemExit):
+        evaluate.main()
+    build_term_df(conn)
+
+    vec_dir = tmp_path / "vec"
+    monkeypatch.setattr(sys, "argv", ["x", "--model", "e5-small", "--db", str(db), "--out-dir", str(vec_dir)])
+    embed.main()
+    for method in ("bm25-gate", "hybrid-gate", "lang-rule"):
+        extra = [] if method == "bm25-gate" else ["--vectors-dir", str(vec_dir)]
+        monkeypatch.setattr(sys, "argv", ["x", "--method", method, "--db", str(db), "--queries", str(queries), *extra])
+        evaluate.main()
+    for name in ("bm25-gate_3", "hybrid-gate-e5-small_3", "lang-rule-e5-small_3"):
+        report = json.loads((results / f"{name}.json").read_text(encoding="utf-8"))
+        assert report["groups"]["synthetic/en"]["hit@10"] == 1.0
+        assert "manual/tr" in report["groups"]

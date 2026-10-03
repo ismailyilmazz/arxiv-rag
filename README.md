@@ -65,7 +65,13 @@ Seçilen modelle tam korpusun vektörleri iki GPU'da üretilir: `notebooks/04_fu
 ```
 python -m scripts.evaluate --method dense --vectors-dir <vektör klasörü>
 python -m scripts.evaluate --method hybrid --vectors-dir <vektör klasörü>
+python -m scripts.build_term_df
+python -m scripts.evaluate --method bm25-gate
 ```
+
+`bm25-gate`, aramayı sorgudaki en nadir iki kelimeden birini içeren makalelerle sınırlar,
+sıralamayı bütün kelimelerle yapar. Kelimelerin ne kadar yaygın olduğu `term_df` tablosundan okunur.
+Tam korpus ölçümü: `notebooks/05_bm25_gate.py`.
 
 ## Ölçümler
 
@@ -76,6 +82,15 @@ Değerlendirme seti v1 (700 sorgu), tam korpus (3.182.775 makale):
 | BM25 | title/en | 0,853 | 0,947 | 0,888 | 1.454 ms |
 | BM25 | synthetic/en | 0,660 | 0,840 | 0,715 | |
 | BM25 | synthetic/tr | 0,053 | 0,127 | 0,072 | |
+| Anlamsal (granite-311m-384) | title/en | 0,930 | 0,990 | 0,952 | 245 ms |
+| Anlamsal (granite-311m-384) | synthetic/en | 0,700 | 0,893 | 0,762 | |
+| Anlamsal (granite-311m-384) | synthetic/tr | 0,173 | 0,413 | 0,232 | |
+| Hibrit (RRF) | title/en | 0,910 | 0,987 | 0,940 | 1.528 ms |
+| Hibrit (RRF) | synthetic/en | 0,680 | 0,927 | 0,769 | |
+| Hibrit (RRF) | synthetic/tr | 0,080 | 0,353 | 0,161 | |
+
+Anlamsal arama Türkçede BM25'in 3,3 katı isabet veriyor. Hibrit arama İngilizcede kazandırıyor ama
+Türkçede kaybettiriyor: RRF iki sıralamaya eşit güveniyor, BM25'in Türkçe sıralaması ise gürültü.
 
 ### Embedding modeli seçimi
 
