@@ -1,0 +1,25 @@
+{
+  "target_false_reject_rate": 0.05,
+  "guard": {
+    "roc_auc": 0.9935,
+    "threshold": 0.4755,
+    "false_reject_rate": 0.0388,
+    "offtopic_reject_rate": 0.96
+  },
+  "top1_dense_threshold": {
+    "roc_auc": 0.9732,
+    "threshold": 0.879,
+    "false_reject_rate": 0.0343,
+    "offtopic_reject_rate": 0.78
+  },
+  "coefficients": {
+    "top1_dense": 5.773,
+    "dense_gap": -3.182,
+    "overlap10": -0.376,
+    "field_maxprob": 0.598,
+    "field_entropy": 1.021,
+    "query_turkish": 0.878,
+    "query_len": 0.388,
+    "ranker_top": 1.479
+  }
+}

@@ -10,11 +10,30 @@ from core.lang import is_turkish
 from core.db import connect
 from core.metrics import rank_of, summarize
 
-METHODS = ("bm25", "bm25-gate", "dense", "hybrid", "hybrid-gate", "lang-rule")
+METHODS = ("bm25", "bm25-gate", "dense", "hybrid", "hybrid-gate", "lang-rule", "pipeline")
 GATE = 2
 
 
-def build_search(method: str, vectors_dir, n_papers: int, conn):
+class PipelineSearch:
+    def __init__(self, pipeline):
+        self.pipeline = pipeline
+        self.last = None
+
+    def __call__(self, conn, text, k):
+        self.last = self.pipeline.search(text, k)
+        return [(r["id"], r["score"]) for r in self.last["results"]]
+
+
+def build_search(method: str, vectors_dir, n_papers: int, conn, models_dir=None):
+    if method == "pipeline":
+        if vectors_dir is None or models_dir is None:
+            raise SystemExit("--method pipeline için --vectors-dir ve --models-dir gerekli.")
+        if not search_bm25.has_term_df(conn):
+            raise SystemExit("term_df tablosu yok. Önce: python -m scripts.build_term_df")
+        from core.pipeline import SearchPipeline
+
+        pipeline = SearchPipeline.load(conn, vectors_dir, models_dir)
+        return PipelineSearch(pipeline), len(pipeline.index), pipeline.index.meta["model"]
     gate = GATE if method in ("bm25-gate", "hybrid-gate", "lang-rule") else None
     if gate and not search_bm25.has_term_df(conn):
         raise SystemExit("term_df tablosu yok. Önce: python -m scripts.build_term_df")
@@ -54,6 +73,7 @@ def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--method", choices=METHODS, default="bm25")
     p.add_argument("--vectors-dir", type=Path, default=None)
+    p.add_argument("--models-dir", type=Path, default=None)
     p.add_argument("--db", type=Path, default=config.DB_PATH)
     p.add_argument("--queries", type=Path, default=config.EVAL_QUERIES_PATH)
     p.add_argument("--k", type=int, default=10)
@@ -61,7 +81,7 @@ def main() -> None:
 
     conn = connect(args.db)
     n_papers = conn.execute("SELECT COUNT(*) FROM papers").fetchone()[0]
-    search, searched, model = build_search(args.method, args.vectors_dir, n_papers, conn)
+    search, searched, model = build_search(args.method, args.vectors_dir, n_papers, conn, args.models_dir)
     label = args.method if model is None else f"{args.method}-{model}"
     with open(args.queries, encoding="utf-8") as f:
         queries = [json.loads(line) for line in f if line.strip()]
@@ -72,6 +92,7 @@ def main() -> None:
     missing = targets - present
 
     groups, offtopic_scores, latencies = {}, {}, []
+    accepted, stage_times = {}, {}
     for i, q in enumerate(queries, start=1):
         if i % 25 == 0 or i == len(queries):
             print(f"  {i}/{len(queries)} sorgu", end="\r", flush=True)
@@ -81,6 +102,11 @@ def main() -> None:
         results = search(conn, q["query"], k=args.k)
         latencies.append((time.perf_counter() - start) * 1000)
         key = f"{q['type']}/{q['lang']}"
+        last = getattr(search, "last", None)
+        if last is not None:
+            accepted.setdefault(key, []).append(last["accepted"])
+            for stage, ms in last["timings_ms"].items():
+                stage_times.setdefault(stage, []).append(ms)
         if q["target_id"] is None:
             offtopic_scores.setdefault(key, []).append(results[0][1] if results else 0.0)
         else:
@@ -98,6 +124,9 @@ def main() -> None:
         "groups": {key: summarize(ranks, args.k) for key, ranks in sorted(groups.items())},
         "offtopic_top1_score": {key: round(statistics.mean(s), 3) for key, s in sorted(offtopic_scores.items())},
     }
+    if accepted:
+        report["guard_accept_rate"] = {key: round(sum(v) / len(v), 4) for key, v in sorted(accepted.items())}
+        report["median_stage_ms"] = {stage: round(statistics.median(v), 1) for stage, v in stage_times.items()}
 
     print(f"\nYöntem: {label} | aranan: {searched:,} makale | "
           f"ortanca gecikme: {report['median_latency_ms']} ms")
@@ -108,6 +137,9 @@ def main() -> None:
         print(f"{key:<16}{m['n']:>5}{m['hit@1']:>9.3f}{m['hit@3']:>9.3f}{m[f'hit@{args.k}']:>9.3f}{m[f'mrr@{args.k}']:>9.3f}")
     for key, s in report["offtopic_top1_score"].items():
         print(f"{key:<16} ortalama en iyi skor: {s}")
+    if accepted:
+        print("\nBekçinin kabul oranı:", report["guard_accept_rate"])
+        print("Aşamaların ortanca süresi (ms):", report["median_stage_ms"])
 
     config.RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     out = config.RESULTS_DIR / f"{label}_{searched}.json"

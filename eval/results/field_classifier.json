@@ -1,0 +1,41 @@
+{
+  "groups": [
+    "astro-ph",
+    "cond-mat",
+    "cs",
+    "econ",
+    "eess",
+    "gr-qc",
+    "hep",
+    "math",
+    "math-ph",
+    "nlin",
+    "nucl",
+    "physics",
+    "q-bio",
+    "q-fin",
+    "quant-ph",
+    "stat"
+  ],
+  "train_size": 400000,
+  "test_size": 50000,
+  "test_year": 2026,
+  "embedding_lr": {
+    "accuracy": 0.8464,
+    "macro_f1": 0.652,
+    "seconds": 137.7,
+    "queries": {
+      "en": 0.7867,
+      "tr": 0.6636
+    }
+  },
+  "tfidf_sgd": {
+    "accuracy": 0.8656,
+    "macro_f1": 0.6917,
+    "seconds": 95.4,
+    "queries": {
+      "en": 0.7311,
+      "tr": 0.4727
+    }
+  }
+}

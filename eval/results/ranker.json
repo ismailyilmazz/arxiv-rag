@@ -1,0 +1,77 @@
+{
+  "best_iteration": 168,
+  "train_queries": 4434,
+  "feature_importance_gain": {
+    "dense_score": 10293.2,
+    "dense_rank": 546778.8,
+    "bm25_score": 4311.6,
+    "bm25_rank": 57131.6,
+    "in_both": 12360.2,
+    "field_prob": 3402.9,
+    "title_overlap": 14005.9,
+    "year": 2864.8,
+    "abstract_len": 6396.9,
+    "query_turkish": 18892.0,
+    "query_len": 1803.1
+  },
+  "dense": {
+    "manual/tr": {
+      "n": 70,
+      "hit@1": 0.2571,
+      "hit@3": 0.4429,
+      "hit@10": 0.5571,
+      "mrr@10": 0.344
+    },
+    "synthetic/en": {
+      "n": 150,
+      "hit@1": 0.7,
+      "hit@3": 0.82,
+      "hit@10": 0.8933,
+      "mrr@10": 0.7617
+    },
+    "synthetic/tr": {
+      "n": 150,
+      "hit@1": 0.1733,
+      "hit@3": 0.2467,
+      "hit@10": 0.4133,
+      "mrr@10": 0.2322
+    },
+    "title/en": {
+      "n": 300,
+      "hit@1": 0.93,
+      "hit@3": 0.97,
+      "hit@10": 0.99,
+      "mrr@10": 0.9523
+    }
+  },
+  "ranker": {
+    "manual/tr": {
+      "n": 70,
+      "hit@1": 0.2714,
+      "hit@3": 0.4571,
+      "hit@10": 0.5857,
+      "mrr@10": 0.3792
+    },
+    "synthetic/en": {
+      "n": 150,
+      "hit@1": 0.7467,
+      "hit@3": 0.8667,
+      "hit@10": 0.94,
+      "mrr@10": 0.8157
+    },
+    "synthetic/tr": {
+      "n": 150,
+      "hit@1": 0.1933,
+      "hit@3": 0.2933,
+      "hit@10": 0.4133,
+      "mrr@10": 0.2548
+    },
+    "title/en": {
+      "n": 300,
+      "hit@1": 0.9733,
+      "hit@3": 0.9933,
+      "hit@10": 1.0,
+      "mrr@10": 0.9843
+    }
+  }
+}

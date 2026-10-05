@@ -1,5 +1,6 @@
 import math
 import sqlite3
+import time
 from typing import Optional
 
 import numpy as np
@@ -27,6 +28,7 @@ class FeatureBuilder:
         self.field_model = field_model
         self.depth = depth
         self.gate = gate
+        self.last_timings: dict[str, float] = {}
 
     def _field_probs(self, vectors: np.ndarray) -> Optional[np.ndarray]:
         if self.field_model is None:
@@ -40,9 +42,13 @@ class FeatureBuilder:
         return {r[0]: tuple(r[1:]) for r in rows}
 
     def build(self, texts: list[str], batch_size: int = 64) -> list[dict]:
+        t0 = time.perf_counter()
         vectors = self.encoder.encode_queries(texts, batch_size=batch_size)
+        t1 = time.perf_counter()
         dense_pks, dense_scores = self.index.search_batch(vectors, self.depth)
+        t2 = time.perf_counter()
         probs = self._field_probs(vectors)
+        bm25_seconds = 0.0
         groups = self.field_model["groups"] if self.field_model else []
         group_index = {g: i for i, g in enumerate(groups)}
         missing_rank = self.depth + 1
@@ -50,7 +56,9 @@ class FeatureBuilder:
         for i, text in enumerate(texts):
             d_pks = [int(p) for p in dense_pks[i]]
             d_rank = {pk: r for r, pk in enumerate(d_pks, start=1)}
+            tb = time.perf_counter()
             lexical = search_bm25.search_pks(self.conn, text, self.depth, gate=self.gate)
+            bm25_seconds += time.perf_counter() - tb
             b_rank = {pk: r for r, (pk, _) in enumerate(lexical, start=1)}
             b_score = dict(lexical)
             pks = list(dict.fromkeys(d_pks + [pk for pk, _ in lexical]))
@@ -87,4 +95,9 @@ class FeatureBuilder:
             ]
             results.append({"pks": pks, "ids": ids, "X": np.array(rows, dtype=np.float32),
                             "query": np.array(query_row, dtype=np.float32)})
+        t3 = time.perf_counter()
+        self.last_timings = {
+            "encode_ms": (t1 - t0) * 1000, "dense_ms": (t2 - t1) * 1000, "bm25_ms": bm25_seconds * 1000,
+            "features_ms": (t3 - t2 - bm25_seconds) * 1000,
+        }
         return results

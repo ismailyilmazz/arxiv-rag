@@ -104,6 +104,18 @@ Kaggle'da çalışır: `notebooks/06_train_models.py` (girdiler: 04 vektörler, 
 Not: Nadir kelime kapısı artık sözlükte bulunan kelime sayısı 4'ten azsa kurulmuyor (Türkçe sorgulardaki
 fazla sıkılığın düzeltmesi). `bm25-gate` sonucu 06 notebook'unda yeniden ölçülür.
 
+## Adım 4c: Arama akışı
+
+`core/pipeline.py` içindeki `SearchPipeline`, bir sorguyu uçtan uca işler: anlamsal arama ve kapılı BM25
+ile aday havuzu, özellikler, sıralayıcı ve bekçi. Çıktı: ilk k makale, "kaynak yeterli mi" kararı ve
+aşama süreleri. Tam korpus ölçümü (CPU): `notebooks/07_pipeline.py`.
+
+```
+python -m scripts.evaluate --method pipeline --vectors-dir <vektörler> --models-dir <modeller>
+```
+
+Kabul kriteri: canlı akışın değerlendirme sonucu, Adım 4b'deki çevrimdışı sıralayıcı sonucuyla aynı olmalı.
+
 ## Ölçümler
 
 Değerlendirme seti: 730 sorgu (300 başlık, 150+150 sentetik İngilizce/Türkçe, 30 elle yazılmış Türkçe,
@@ -125,6 +137,36 @@ Bulgular:
   makaleler orijinal makalenin önüne geçiyor.
 - RRF iki listeye eşit güvendiği için Türkçede kaybettiriyor. Varsayılan yöntem anlamsal arama;
   sinyalleri birleştirmek Adım 4'teki sıralayıcının işi.
+
+### Adım 4: Öğrenen katman (değerlendirme seti v2, 770 sorgu)
+
+Alan sınıflandırıcısı (16 ana alan):
+
+| model | 2026 makaleleri doğruluk | İngilizce sorgu | Türkçe sorgu |
+|---|---|---|---|
+| **granite vektörleri + lojistik regresyon** | 0,846 | **0,787** | **0,664** |
+| TF-IDF + lojistik regresyon (SGD) | 0,866 | 0,731 | 0,473 |
+
+Sıralayıcı (LightGBM LambdaRank) ve tek başına anlamsal arama, aynı aday havuzunda:
+
+| grup | hit@10 | hit@3 | hit@1 | aday havuzu tavanı |
+|---|---|---|---|---|
+| title/en | 0,990 → **1,000** | 0,970 → **0,993** | 0,930 → **0,973** | 1,00 |
+| synthetic/en | 0,893 → **0,940** | 0,820 → **0,867** | 0,700 → **0,747** | 1,00 |
+| synthetic/tr | 0,413 → 0,413 | 0,247 → **0,293** | 0,173 → **0,193** | 0,64 |
+| manual/tr (70) | 0,557 → **0,586** | 0,443 → **0,457** | 0,257 → **0,271** | 0,80 |
+
+En etkili özellikler: anlamsal sıra, BM25 sırası, sorgunun Türkçe olması. Sıralayıcı hiçbir grupta
+anlamsal aramanın gerisinde kalmıyor; RRF'nin Türkçedeki kaybı yok.
+
+Bekçi (670 gerçek sorgu, 100 konu dışı soru; eşik eğitim verisinde %5 yanlış ret hedefiyle seçildi):
+
+| yöntem | ROC-AUC | yanlış ret | konu dışı ret |
+|---|---|---|---|
+| **lojistik regresyon bekçi** | **0,994** | 3,9% | **96%** |
+| en iyi anlamsal skora tek eşik | 0,973 | 3,4% | 78% |
+
+Not: `manual/tr` grubu bu tabloda 70 sorgu; yukarıdaki 30 sorguluk tabloyla karşılaştırılmamalı.
 
 ### Embedding modeli seçimi
 

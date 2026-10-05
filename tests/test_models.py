@@ -7,7 +7,7 @@ from core import embeddings
 from core.db import COLUMNS, connect, init_db, upsert_papers
 from core.fields import field_of
 from core.search_bm25 import build_term_df
-from scripts import build_features, embed, train_field_classifier, train_guard, train_ranker
+from scripts import build_features, embed, evaluate, train_field_classifier, train_guard, train_ranker
 from tests.test_dense_hybrid import FakeEncoder
 
 CS = ["graph neural network node embedding", "transformer language model attention",
@@ -63,14 +63,14 @@ def test_full_model_pipeline(tmp_path, monkeypatch):
                        "target_id": None} for i in range(30)])
 
     monkeypatch.setattr(sys, "argv", ["x", "--db", str(db), "--vectors-dir", str(vec), "--queries", str(eval_file),
-                                      "--out", str(models / "field.joblib"), "--train-size", "40", "--test-size", "10"])
+                                      "--out", str(models / "field_clf.joblib"), "--train-size", "40", "--test-size", "10"])
     train_field_classifier.main()
     field_report = json.loads((results / "field_classifier.json").read_text())
     assert set(field_report["groups"]) == {"cs", "math"} and "tfidf_sgd" in field_report
 
     for split, path, extra in (("train", train_file, ["--add-titles"]), ("offtopic", off_file, []), ("eval", eval_file, [])):
         monkeypatch.setattr(sys, "argv", ["x", "--db", str(db), "--vectors-dir", str(vec), "--field-model",
-                                          str(models / "field.joblib"), "--queries", str(path), "--split", split,
+                                          str(models / "field_clf.joblib"), "--queries", str(path), "--split", split,
                                           "--out-dir", str(feats), *extra])
         build_features.main()
     train_q = pd.read_parquet(feats / "train_queries.parquet")
@@ -89,3 +89,20 @@ def test_full_model_pipeline(tmp_path, monkeypatch):
     guard_report = json.loads((results / "guard.json").read_text())
     assert 0.0 <= guard_report["guard"]["roc_auc"] <= 1.0
     assert (models / "guard.joblib").exists()
+
+    from core.db import connect as open_db
+    from core.pipeline import SearchPipeline
+
+    pipe = SearchPipeline.load(open_db(db), vec, models)
+    out = pipe.search(papers[0][1], k=5)
+    assert len(out["results"]) == 5 and out["results"][0]["id"] == papers[0][0]
+    assert isinstance(out["accepted"], bool) and 0.0 <= out["guard_prob"] <= 1.0
+    assert {"encode_ms", "dense_ms", "bm25_ms", "features_ms", "ranker_ms", "guard_ms", "total_ms"} <= set(out["timings_ms"])
+
+    monkeypatch.setattr(evaluate.config, "RESULTS_DIR", results)
+    monkeypatch.setattr(sys, "argv", ["x", "--method", "pipeline", "--db", str(db), "--queries", str(eval_file),
+                                      "--vectors-dir", str(vec), "--models-dir", str(models)])
+    evaluate.main()
+    live = json.loads((results / "pipeline-e5-small_60.json").read_text(encoding="utf-8"))
+    assert live["groups"]["title/en"] == ranker_report["ranker"]["title/en"]
+    assert set(live["guard_accept_rate"]) == {"title/en", "offtopic/en"}
