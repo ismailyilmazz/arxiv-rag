@@ -12,7 +12,9 @@ def summarize(ranks: Sequence[Optional[int]], k: int = 10) -> dict:
     n = len(ranks)
     if n == 0:
         return {"n": 0}
-    hit1 = sum(1 for r in ranks if r == 1) / n
-    hitk = sum(1 for r in ranks if r is not None and r <= k) / n
+
+    def hit(cut: int) -> float:
+        return round(sum(1 for r in ranks if r is not None and r <= cut) / n, 4)
+
     mrr = sum(1 / r for r in ranks if r is not None and r <= k) / n
-    return {"n": n, "hit@1": round(hit1, 4), f"hit@{k}": round(hitk, 4), f"mrr@{k}": round(mrr, 4)}
+    return {"n": n, "hit@1": hit(1), "hit@3": hit(3), f"hit@{k}": hit(k), f"mrr@{k}": round(mrr, 4)}

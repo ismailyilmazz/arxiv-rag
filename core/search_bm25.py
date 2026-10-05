@@ -53,11 +53,19 @@ def doc_freq(conn: sqlite3.Connection, word: str) -> int:
 def gated_query(conn: sqlite3.Connection, text: str, gate: int = 2) -> str:
     words = query_words(text)
     known = sorted((df, w) for w in words if (df := doc_freq(conn, w)) > 0)
-    if len(known) <= gate:
+    if len(known) <= gate + 1:
         return _any_of(words)
     rare = [w for _, w in known[:gate]]
     rest = [w for w in words if w not in rare]
     return f"({_any_of(rare)}) AND ({_any_of(rest)})"
+
+
+def search_pks(conn: sqlite3.Connection, text: str, k: int = 10, gate: Optional[int] = None) -> list[tuple[int, float]]:
+    query = gated_query(conn, text, gate) if gate else to_fts_query(text)
+    if not query:
+        return []
+    sql = "SELECT rowid, -rank FROM papers_fts WHERE papers_fts MATCH ? ORDER BY rank LIMIT ?"
+    return [(r[0], r[1]) for r in conn.execute(sql, (query, k))]
 
 
 def search(conn: sqlite3.Connection, text: str, k: int = 10, gate: Optional[int] = None) -> list[tuple[str, float]]:

@@ -12,8 +12,10 @@ DB_PATH = DATA_DIR / "papers.db"
 RESULTS_DIR = ROOT / "eval" / "results"
 
 EVAL_QUERIES_PATH = ROOT / "eval" / "queries.jsonl"
+TRAIN_DIR = ROOT / "train"
 
 LLM_API_KEY = os.getenv("LLM_API_KEY", "")
 LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.groq.com/openai/v1")
 LLM_MODEL = os.getenv("LLM_MODEL", "openai/gpt-oss-120b")
 LLM_MODEL_FAST = os.getenv("LLM_MODEL_FAST", "openai/gpt-oss-20b")
+LLM_GEN_MODELS = [m.strip() for m in os.getenv("LLM_GEN_MODELS", f"{LLM_MODEL},{LLM_MODEL_FAST}").split(",") if m.strip()]

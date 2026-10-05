@@ -728,3 +728,43 @@
 {"qid": "manual-tr-2103.00020", "type": "manual", "lang": "tr", "query": "openai clip text image matching zero shot", "target_id": "2103.00020"}
 {"qid": "manual-tr-1707.06347", "type": "manual", "lang": "tr", "query": "ppo algoritması reinforcement learning", "target_id": "1707.06347"}
 {"qid": "manual-tr-1602.05629", "type": "manual", "lang": "tr", "query": "federated learning merkezi olmayan veriyle model eğitimi", "target_id": "1602.05629"}
+{"qid": "manual-tr-1801.01203", "type": "manual", "lang": "tr", "query": "spectre zafiyeti speculative execution makale", "target_id": "1801.01203"}
+{"qid": "manual-tr-1801.01207", "type": "manual", "lang": "tr", "query": "meltdown cpu güvenlik açığı", "target_id": "1801.01207"}
+{"qid": "manual-tr-1412.6572", "type": "manual", "lang": "tr", "query": "adversarial examples makine öğrenmesi goodfellow", "target_id": "1412.6572"}
+{"qid": "manual-tr-1610.05820", "type": "manual", "lang": "tr", "query": "membership inference attack machine learning", "target_id": "1610.05820"}
+{"qid": "manual-tr-1607.00133", "type": "manual", "lang": "tr", "query": "differential privacy deep learning makalesi", "target_id": "1607.00133"}
+{"qid": "manual-tr-2012.07805", "type": "manual", "lang": "tr", "query": "llm training data extraction", "target_id": "2012.07805"}
+{"qid": "manual-tr-1603.04467", "type": "manual", "lang": "tr", "query": "tensorflow makalesi 2016", "target_id": "1603.04467"}
+{"qid": "manual-tr-1912.01703", "type": "manual", "lang": "tr", "query": "pytorch paper", "target_id": "1912.01703"}
+{"qid": "manual-tr-1712.05889", "type": "manual", "lang": "tr", "query": "ray framework distributed ai berkeley", "target_id": "1712.05889"}
+{"qid": "manual-tr-1910.02054", "type": "manual", "lang": "tr", "query": "zero memory optimization deepspeed", "target_id": "1910.02054"}
+{"qid": "manual-tr-1909.08053", "type": "manual", "lang": "tr", "query": "megatron-lm nvidia makalesi", "target_id": "1909.08053"}
+{"qid": "manual-tr-2309.06180", "type": "manual", "lang": "tr", "query": "vllm pagedattention makalesi", "target_id": "2309.06180"}
+{"qid": "manual-tr-1701.06538", "type": "manual", "lang": "tr", "query": "mixture of experts moe neural networks", "target_id": "1701.06538"}
+{"qid": "manual-tr-1901.04085", "type": "manual", "lang": "tr", "query": "passage re-ranking with bert", "target_id": "1901.04085"}
+{"qid": "manual-tr-2104.08663", "type": "manual", "lang": "tr", "query": "beir benchmark information retrieval", "target_id": "2104.08663"}
+{"qid": "manual-tr-2210.07316", "type": "manual", "lang": "tr", "query": "mteb text embedding benchmark", "target_id": "2210.07316"}
+{"qid": "manual-tr-2007.00808", "type": "manual", "lang": "tr", "query": "ance contrastive learning", "target_id": "2007.00808"}
+{"qid": "manual-tr-1606.07792", "type": "manual", "lang": "tr", "query": "wide and deep learning google recommender", "target_id": "1606.07792"}
+{"qid": "manual-tr-1708.05031", "type": "manual", "lang": "tr", "query": "neural collaborative filtering ncf makale", "target_id": "1708.05031"}
+{"qid": "manual-tr-1906.00091", "type": "manual", "lang": "tr", "query": "dlrm recommendation model facebook", "target_id": "1906.00091"}
+{"qid": "manual-tr-2107.03374", "type": "manual", "lang": "tr", "query": "openai codex makalesi human-eval", "target_id": "2107.03374"}
+{"qid": "manual-tr-2310.06770", "type": "manual", "lang": "tr", "query": "swe-bench github llm", "target_id": "2310.06770"}
+{"qid": "manual-tr-2002.08155", "type": "manual", "lang": "tr", "query": "codebert microsoft makale", "target_id": "2002.08155"}
+{"qid": "manual-tr-1403.6652", "type": "manual", "lang": "tr", "query": "deepwalk graph representation learning", "target_id": "1403.6652"}
+{"qid": "manual-tr-1607.00653", "type": "manual", "lang": "tr", "query": "node2vec algoritması", "target_id": "1607.00653"}
+{"qid": "manual-tr-1706.02216", "type": "manual", "lang": "tr", "query": "graphsage inductive representation learning", "target_id": "1706.02216"}
+{"qid": "manual-tr-1710.10903", "type": "manual", "lang": "tr", "query": "graph attention networks gat", "target_id": "1710.10903"}
+{"qid": "manual-tr-1705.07874", "type": "manual", "lang": "tr", "query": "shapley values shap makalesi", "target_id": "1705.07874"}
+{"qid": "manual-tr-1602.04938", "type": "manual", "lang": "tr", "query": "lime why should i trust you", "target_id": "1602.04938"}
+{"qid": "manual-tr-1503.02531", "type": "manual", "lang": "tr", "query": "knowledge distillation hinton", "target_id": "1503.02531"}
+{"qid": "manual-tr-1907.10902", "type": "manual", "lang": "tr", "query": "optuna framework makalesi", "target_id": "1907.10902"}
+{"qid": "manual-tr-1908.07442", "type": "manual", "lang": "tr", "query": "tabnet tabular deep learning google", "target_id": "1908.07442"}
+{"qid": "manual-tr-2012.07436", "type": "manual", "lang": "tr", "query": "informer time series transformer", "target_id": "2012.07436"}
+{"qid": "manual-tr-1912.09363", "type": "manual", "lang": "tr", "query": "temporal fusion transformers time series", "target_id": "1912.09363"}
+{"qid": "manual-tr-2212.04356", "type": "manual", "lang": "tr", "query": "openai whisper makalesi speech recognition", "target_id": "2212.04356"}
+{"qid": "manual-tr-quant-ph/9508027", "type": "manual", "lang": "tr", "query": "shor algoritması kuantum çarpanlara ayırma", "target_id": "quant-ph/9508027"}
+{"qid": "manual-tr-quant-ph/9605043", "type": "manual", "lang": "tr", "query": "grover kuantum arama algoritması", "target_id": "quant-ph/9605043"}
+{"qid": "manual-tr-1910.11333", "type": "manual", "lang": "tr", "query": "google quantum supremacy makalesi", "target_id": "1910.11333"}
+{"qid": "manual-tr-1602.03837", "type": "manual", "lang": "tr", "query": "kara delik birleşmesi kütleçekim dalgası ligo ilk gözlem", "target_id": "1602.03837"}
+{"qid": "manual-tr-math/0211159", "type": "manual", "lang": "tr", "query": "perelman ricci flow poincare sanısı makalesi", "target_id": "math/0211159"}

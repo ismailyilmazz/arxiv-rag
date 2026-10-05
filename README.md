@@ -73,6 +73,37 @@ python -m scripts.evaluate --method bm25-gate
 sıralamayı bütün kelimelerle yapar. Kelimelerin ne kadar yaygın olduğu `term_df` tablosundan okunur.
 Tam korpus ölçümü: `notebooks/05_bm25_gate.py`.
 
+## Adım 4a: Eğitim verisi
+
+Sıralayıcı ve bekçi için eğitim sorguları Groq ile üretilir. Makaleler sadece eğitim havuzundan
+seçilir, değerlendirme setindeki makaleler hariç tutulur. Her makale için üç sorgu: İngilizce,
+Türkçe ve Türkçe ile İngilizce terimlerin karıştığı "mühendis ağzı". Birden fazla model sırayla
+kullanılır, bir modelin günlük kotası dolunca diğerleriyle devam edilir, kesilen iş kaldığı yerden sürer.
+
+```
+python -m scripts.gen_train_queries --n-papers 3 --n-offtopic 0
+python -m scripts.gen_train_queries
+```
+
+Çıktılar `train/queries.jsonl` ve `train/offtopic.jsonl` (git'e girer). Modeller `.env` içindeki
+`LLM_GEN_MODELS` satırından okunur.
+
+## Adım 4b: Sınıflandırıcı, sıralayıcı ve bekçi
+
+Kaggle'da çalışır: `notebooks/06_train_models.py` (girdiler: 04 vektörler, 05 term_df'li veritabanı).
+
+- `scripts/train_field_classifier.py`: granite vektörleri üzerinde lojistik regresyon, yaklaşık 16 ana alan.
+  Rakibi TF-IDF. Test: 2026 makaleleri ve değerlendirme sorguları (İngilizce, Türkçe ayrı).
+- `scripts/build_features.py`: her sorgu için aday havuzu (anlamsal ilk 100 ∪ kapılı BM25 ilk 100)
+  ve özellikler. Aynı kod (`core/features.py`) eğitimde, değerlendirmede ve sunucuda kullanılır.
+- `scripts/train_ranker.py`: LightGBM LambdaRank. Rakibi aynı aday havuzunda tek başına anlamsal arama.
+  Doğrulama için eğitim makalelerinin %15'i makale bazında ayrılır.
+- `scripts/train_guard.py`: lojistik regresyon. Eşik, gerçek sorguların en fazla %5'ini reddedecek şekilde
+  eğitim verisinden seçilir. Rakibi aynı kuralla en iyi anlamsal skora konan eşik.
+
+Not: Nadir kelime kapısı artık sözlükte bulunan kelime sayısı 4'ten azsa kurulmuyor (Türkçe sorgulardaki
+fazla sıkılığın düzeltmesi). `bm25-gate` sonucu 06 notebook'unda yeniden ölçülür.
+
 ## Ölçümler
 
 Değerlendirme seti: 730 sorgu (300 başlık, 150+150 sentetik İngilizce/Türkçe, 30 elle yazılmış Türkçe,

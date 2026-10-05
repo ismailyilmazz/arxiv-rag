@@ -16,4 +16,4 @@ def test_rank_of():
 
 def test_summarize():
     m = summarize([1, 4, None, 12], k=10)
-    assert m == {"n": 4, "hit@1": 0.25, "hit@10": 0.5, "mrr@10": round((1 + 0.25) / 4, 4)}
+    assert m == {"n": 4, "hit@1": 0.25, "hit@3": 0.25, "hit@10": 0.5, "mrr@10": round((1 + 0.25) / 4, 4)}

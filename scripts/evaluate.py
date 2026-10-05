@@ -103,9 +103,9 @@ def main() -> None:
           f"ortanca gecikme: {report['median_latency_ms']} ms")
     if missing:
         print(f"Uyarı: {len(missing)} sorgunun doğru makalesi bu veritabanında yok, atlandı.")
-    print(f"\n{'grup':<16}{'n':>5}{'hit@1':>9}{'hit@' + str(args.k):>9}{'mrr@' + str(args.k):>9}")
+    print(f"\n{'grup':<16}{'n':>5}{'hit@1':>9}{'hit@3':>9}{'hit@' + str(args.k):>9}{'mrr@' + str(args.k):>9}")
     for key, m in report["groups"].items():
-        print(f"{key:<16}{m['n']:>5}{m['hit@1']:>9.3f}{m[f'hit@{args.k}']:>9.3f}{m[f'mrr@{args.k}']:>9.3f}")
+        print(f"{key:<16}{m['n']:>5}{m['hit@1']:>9.3f}{m['hit@3']:>9.3f}{m[f'hit@{args.k}']:>9.3f}{m[f'mrr@{args.k}']:>9.3f}")
     for key, s in report["offtopic_top1_score"].items():
         print(f"{key:<16} ortalama en iyi skor: {s}")
 

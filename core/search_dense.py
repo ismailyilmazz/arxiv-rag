@@ -20,6 +20,30 @@ class DenseIndex:
     def __len__(self) -> int:
         return len(self.pks)
 
+    def _positions(self) -> np.ndarray:
+        if not hasattr(self, "_pos"):
+            self._pos = np.full(int(self.pks.max()) + 1, -1, dtype=np.int64)
+            self._pos[self.pks] = np.arange(len(self.pks))
+        return self._pos
+
+    def scores_for(self, query_vector: np.ndarray, pks: list[int]) -> np.ndarray:
+        rows = self._positions()[np.asarray(pks, dtype=np.int64)]
+        return self.vectors[rows] @ query_vector.astype(np.float32)
+
+    def search_batch(self, queries: np.ndarray, k: int, chunk: int = 32) -> tuple[np.ndarray, np.ndarray]:
+        k = min(k, len(self.pks))
+        out_pks = np.empty((len(queries), k), dtype=np.int64)
+        out_scores = np.empty((len(queries), k), dtype=np.float32)
+        for start in range(0, len(queries), chunk):
+            scores = queries[start:start + chunk].astype(np.float32) @ self.vectors.T
+            top = np.argpartition(-scores, k - 1, axis=1)[:, :k]
+            top_scores = np.take_along_axis(scores, top, axis=1)
+            order = np.argsort(-top_scores, axis=1)
+            top = np.take_along_axis(top, order, axis=1)
+            out_pks[start:start + len(top)] = self.pks[top]
+            out_scores[start:start + len(top)] = np.take_along_axis(top_scores, order, axis=1)
+        return out_pks, out_scores
+
     def search(self, conn: sqlite3.Connection, query_vector: np.ndarray, k: int = 10) -> list[tuple[str, float]]:
         scores = self.vectors @ query_vector.astype(np.float32)
         k = min(k, len(scores))
