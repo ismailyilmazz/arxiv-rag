@@ -32,6 +32,18 @@ def chat(prompt: str, model: str, system: str = "", reasoning_effort: str = "low
     return json.loads(response.choices[0].message.content), tokens
 
 
+def complete(prompt: str, model: str, max_tokens: int = 4000, reasoning_effort: str = "low") -> tuple[str, int]:
+    extra = {"reasoning_effort": reasoning_effort} if "gpt-oss" in model else {}
+    response = _client().chat.completions.create(
+        model=model,
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=max_tokens,
+        **extra,
+    )
+    tokens = response.usage.total_tokens if response.usage else 0
+    return (response.choices[0].message.content or "").strip(), tokens
+
+
 def chat_json(prompt: str, model: str, system: str = "", reasoning_effort: str = "low") -> dict:
     return chat(prompt, model, system, reasoning_effort)[0]
 

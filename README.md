@@ -116,6 +116,35 @@ python -m scripts.evaluate --method pipeline --vectors-dir <vektörler> --models
 
 Kabul kriteri: canlı akışın değerlendirme sonucu, Adım 4b'deki çevrimdışı sıralayıcı sonucuyla aynı olmalı.
 
+Sonuç (tam korpus, CPU, 770 sorgu): hit@1, hit@3 ve hit@10 bütün gruplarda çevrimdışı sonuçla aynı;
+MRR'de en fazla 0,001 fark (06'da sorgular GPU'da fp16, burada CPU'da fp32 kodlandı).
+
+Bekçinin kabul oranı: title/en %99,3, synthetic/en %99,3, manual/tr %92,9, synthetic/tr %88,0;
+konu dışı sorularda İngilizce %2, Türkçe %6. Türkçe gerçek sorgular daha sık reddediliyor (açık konu).
+
+Aşamaların ortanca süresi (ms, ikinci çalıştırma): kodlama 176, anlamsal arama 251, BM25 217, özellikler 80,
+sıralayıcı 1,4, bekçi 0,9; toplam 734. Rapor: `eval/results/pipeline-granite-311m-384_3182775.json`.
+
+## Adım 5: Araştırma kağıdı üretimi
+
+Seçilen makalelerden (1-5) okuma kartları çıkarılır, LLM bu kartlardan atıflı bir metin yazar,
+kod atıfları doğrular ve kaynakçayı makale bilgilerinden kendisi ekler.
+
+- `core/fulltext.py`: önce arXiv HTML'i, yoksa PDF, o da yoksa özet. İstekler arası en az 3 saniye.
+  Yerel veritabanında olmayan makalelerin bilgileri arXiv API'sinden çekilir.
+- `core/cards.py`: makale başına İngilizce okuma kartı (problem, yöntem, bulgular, sınırlar),
+  `data/cache.db` içinde önbellekli. `FULLTEXT_POLICY=cc` ile tam metin sadece CC lisanslı makalelerde kullanılır.
+- `core/writer.py`: üç tür (`survey`, `proposal`, `synthesis`) ve iki dil (`en`, `tr`).
+- `core/citations.py`: geçersiz `[n]` numaralarını sayar ve temizler, atıf almayan kaynakları raporlar,
+  kaynakçayı yazar.
+- Modeller: kartlar `LLM_CARD_MODEL` (varsayılan gpt-oss-20b), yazım `LLM_WRITE_MODEL` (varsayılan gpt-oss-120b).
+
+```
+python -m scripts.generate_paper --ids 1701.06538 2101.03961 2401.04088 --type survey --lang en
+```
+
+Kabul kriteri: üç farklı konuda üretim, geçersiz atıf sıfır, kaynakça makale bilgileriyle birebir aynı.
+
 ## Ölçümler
 
 Değerlendirme seti: 730 sorgu (300 başlık, 150+150 sentetik İngilizce/Türkçe, 30 elle yazılmış Türkçe,
