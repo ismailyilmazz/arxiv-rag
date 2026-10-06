@@ -30,7 +30,11 @@ def main() -> None:
         print(f"  [{s['n']}] {s['id']}  metin: {s['text_source']}{'  (önbellekten)' if s['cached'] else ''}  {s['title'][:70]}")
     c = result["citations"]
     print(f"Atıf: {c['citations_found']} bulundu, geçersiz numaralar: {c['invalid_numbers'] or 'yok'}, "
-          f"atıf almayan kaynak: {c['uncited_sources'] or 'yok'}")
+          f"atıf almayan kaynak: {c['uncited_sources'] or 'yok'}, "
+          f"atıfsız paragraf: {c['uncited_paragraphs']}/{c['paragraphs']}")
+    length = result["length"]
+    print(f"Uzunluk: {length['words']} kelime (kaynakça hariç), cevap payı {length['output_budget_tokens']} token"
+          f"{'  UYARI: metin token sınırında kesildi' if length['truncated'] else ''}")
     print(f"Token: {result['tokens']}  |  süre (ms): {result['timings_ms']}")
     print(f"Çıktı: {args.out_dir / (stem + '.md')}")
 

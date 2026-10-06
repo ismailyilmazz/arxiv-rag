@@ -1,0 +1,54 @@
+{
+  "doc_type": "synthesis",
+  "lang": "en",
+  "models": {
+    "card": "openai/gpt-oss-20b",
+    "write": "openai/gpt-oss-120b"
+  },
+  "sources": [
+    {
+      "n": 1,
+      "id": "math/0211159",
+      "title": "The entropy formula for the Ricci flow and its geometric applications",
+      "text_source": "html",
+      "cached": false
+    },
+    {
+      "n": 2,
+      "id": "math/0303109",
+      "title": "Ricci flow with surgery on three-manifolds",
+      "text_source": "html",
+      "cached": false
+    },
+    {
+      "n": 3,
+      "id": "math/0307245",
+      "title": "Finite extinction time for the solutions to the Ricci flow on certain three-manifolds",
+      "text_source": "html",
+      "cached": false
+    }
+  ],
+  "citations": {
+    "citations_found": 31,
+    "invalid_numbers": [],
+    "uncited_sources": [],
+    "paragraphs": 15,
+    "uncited_paragraphs": 0,
+    "removed_model_references": false
+  },
+  "length": {
+    "words": 801,
+    "output_budget_tokens": 5166,
+    "truncated": false
+  },
+  "tokens": {
+    "cards": 12842,
+    "write": 2938,
+    "total": 15780
+  },
+  "timings_ms": {
+    "cards": 95438,
+    "write": 3188,
+    "total": 98626
+  }
+}

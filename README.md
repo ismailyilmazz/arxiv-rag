@@ -132,11 +132,17 @@ kod atıfları doğrular ve kaynakçayı makale bilgilerinden kendisi ekler.
 
 - `core/fulltext.py`: önce arXiv HTML'i, yoksa PDF, o da yoksa özet. İstekler arası en az 3 saniye.
   Yerel veritabanında olmayan makalelerin bilgileri arXiv API'sinden çekilir.
-- `core/cards.py`: makale başına İngilizce okuma kartı (problem, yöntem, bulgular, sınırlar),
-  `data/cache.db` içinde önbellekli. `FULLTEXT_POLICY=cc` ile tam metin sadece CC lisanslı makalelerde kullanılır.
-- `core/writer.py`: üç tür (`survey`, `proposal`, `synthesis`) ve iki dil (`en`, `tr`).
-- `core/citations.py`: geçersiz `[n]` numaralarını sayar ve temizler, atıf almayan kaynakları raporlar,
-  kaynakçayı yazar.
+- `core/cards.py`: makale başına İngilizce okuma kartı (problem, yöntem, deney kurulumu, bulgular, sınırlar;
+  alan başına 3-8 cümle, metin ne kadar taşıyorsa; sayılar aynen), `data/cache.db` içinde önbellekli. Kart
+  sürümü değişince eski kartlar yenilenir. `FULLTEXT_POLICY=cc` ile tam metin sadece CC lisanslı makalelerde
+  kullanılır.
+- `core/writer.py`: üç tür (`survey`, `proposal`, `synthesis`) ve iki dil (`en`, `tr`). Sabit uzunluk hedefi
+  yok: metin kaynakların taşıyabildiği kadar uzun olur, dolgu yasak. Cevap payı, dakikalık token sınırının
+  izin verdiği en büyük değerdir (Groq ücretsiz katmanında tek istekte yaklaşık 6-7 sayfa, hesap); metin bu
+  tavana çarparsa raporda "kesildi" olarak işaretlenir. Daha uzun metinler için bölüm bölüm yazım ileride
+  eklenebilir.
+- `core/citations.py`: geçersiz `[n]` numaralarını sayar ve temizler, atıf almayan kaynakları ve atıfsız
+  paragrafları raporlar, kaynakçayı yazar.
 - Modeller: kartlar `LLM_CARD_MODEL` (varsayılan gpt-oss-20b), yazım `LLM_WRITE_MODEL` (varsayılan gpt-oss-120b).
 
 ```
@@ -144,6 +150,19 @@ python -m scripts.generate_paper --ids 1701.06538 2101.03961 2401.04088 --type s
 ```
 
 Kabul kriteri: üç farklı konuda üretim, geçersiz atıf sıfır, kaynakça makale bilgileriyle birebir aynı.
+
+İlk kabul testi (çıktılar `eval/generations/`):
+
+| tür / dil | konu | geçersiz atıf | atıfsız paragraf | token (kart + yazım) | süre |
+|---|---|---|---|---|---|
+| survey / en | Mixture of Experts | 0 | 23/25 | 6.529 + 4.537 | 20 sn |
+| proposal / tr | RAG | 0 | 10/13 | 6.293 + 4.596 | 30 sn |
+| synthesis / en | Ricci flow (Perelman) | 0 | 2/13 | 8.497 + 3.217 | 60 sn |
+
+Dokuz makalenin dokuzu da arXiv HTML'inden geldi (2002 tarihli makaleler dahil). Taramada kaynaklar
+çoğunlukla adıyla anıldığı için paragraf bazında atıf ölçümü eklendi ve prompt güçlendirildi. Kartlar kısa
+olduğu için uzun metinlerde tahmin ve dolgu görüldü; kartlar zenginleştirildi ve sabit uzunluk hedefi
+kaldırıldı ("gerektiği kadar").
 
 ## Ölçümler
 

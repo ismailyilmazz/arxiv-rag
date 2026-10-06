@@ -1,5 +1,6 @@
 import re
 
+MIN_PARAGRAPH_WORDS = 25
 _CITE = re.compile(r"\[(\d+(?:\s*[,\u2013\-]\s*\d+)*)\]")
 _REFERENCES_HEADING = re.compile(r"^#{1,3}\s*(References|Bibliography|Kaynakça|Kaynaklar)\s*$",
                                  re.IGNORECASE | re.MULTILINE)
@@ -32,10 +33,15 @@ def check_and_fix(markdown: str, n_sources: int) -> tuple[str, dict]:
         return f"[{', '.join(str(n) for n in dict.fromkeys(good))}]" if good else ""
 
     fixed = _CITE.sub(fix, markdown)
+    substantive = [block for block in re.split(r"\n\s*\n|\n(?=\s*[-*] )", fixed)
+                   if not block.lstrip().startswith("#") and len(block.split()) >= MIN_PARAGRAPH_WORDS]
+    uncited = [block for block in substantive if not _CITE.search(block)]
     report = {
         "citations_found": len(_CITE.findall(markdown)),
         "invalid_numbers": invalid,
         "uncited_sources": sorted(set(range(1, n_sources + 1)) - cited),
+        "paragraphs": len(substantive),
+        "uncited_paragraphs": len(uncited),
         "removed_model_references": removed_references,
     }
     return fixed, report

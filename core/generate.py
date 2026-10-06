@@ -55,7 +55,7 @@ def generate(conn: sqlite3.Connection, cache: sqlite3.Connection, paper_ids: lis
                         "cached": meta["cached"]})
     t_cards = time.perf_counter()
 
-    draft, write_tokens = writer.write(sources, doc_type, lang, write_model)
+    draft, write_tokens, truncated, budget = writer.write(sources, doc_type, lang, write_model)
     t_write = time.perf_counter()
     body, report = citations.check_and_fix(draft, len(sources))
     markdown = body.rstrip() + "\n\n" + citations.bibliography(sources, lang)
@@ -68,6 +68,7 @@ def generate(conn: sqlite3.Connection, cache: sqlite3.Connection, paper_ids: lis
         "sources": [{"n": s["n"], "id": s["id"], "title": s["title"], "text_source": s["text_source"],
                      "cached": s["cached"]} for s in sources],
         "citations": report,
+        "length": {"words": len(body.split()), "output_budget_tokens": budget, "truncated": truncated},
         "tokens": {"cards": card_tokens, "write": write_tokens, "total": card_tokens + write_tokens},
         "timings_ms": {"cards": round((t_cards - start) * 1000), "write": round((t_write - t_cards) * 1000),
                        "total": round((time.perf_counter() - start) * 1000)},

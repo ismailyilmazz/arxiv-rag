@@ -4,7 +4,6 @@ LANGUAGES = {"en": "English", "tr": "Turkish"}
 DOC_TYPES = {
     "survey": {
         "label": "literature survey",
-        "words": 1600,
         "sections": {
             "en": ["Introduction", "Background", "Approaches", "Comparison and Discussion", "Open Problems", "Conclusion"],
             "tr": ["Giriş", "Arka Plan", "Yaklaşımlar", "Karşılaştırma ve Tartışma", "Açık Problemler", "Sonuç"],
@@ -14,7 +13,6 @@ DOC_TYPES = {
     },
     "proposal": {
         "label": "research proposal",
-        "words": 1400,
         "sections": {
             "en": ["Abstract", "Problem and Motivation", "Related Work", "Research Questions", "Proposed Method",
                    "Evaluation Plan", "Expected Contributions", "Risks and Limitations"],
@@ -25,13 +23,12 @@ DOC_TYPES = {
                  "never as an obtained result.",
     },
     "synthesis": {
-        "label": "short synthesis report",
-        "words": 900,
+        "label": "synthesis report",
         "sections": {
             "en": ["Summary", "Key Findings", "Agreements and Differences", "Implications", "Conclusion"],
             "tr": ["Özet", "Temel Bulgular", "Ortak Noktalar ve Farklar", "Çıkarımlar", "Sonuç"],
         },
-        "guide": "Be concise and focus on what a reader needs to know from these sources taken together.",
+        "guide": "Focus on what a reader needs to know from these sources taken together.",
     },
 }
 
@@ -45,10 +42,12 @@ Structure: start with a level-1 heading containing a title you write, then use e
 
 Rules:
 - {guide}
-- Support every statement about a source with a citation in square brackets, such as [1] or [1, 3]. Use only the numbers 1 to {n}.
+- Every paragraph and every bullet point that describes, compares or relies on the sources must contain at least one citation in square brackets, such as [1] or [1, 3]. Use only the numbers 1 to {n}.
+- When you mention a source by name, put its number next to it, for example "Switch Transformers [2]".
 - Do not invent results, numbers, datasets or methods that are not in the sources.
 - Do not write a references or bibliography section; it is added automatically.
-- Write about {words} words in {language}. Keep technical terms that are normally used in English as they are.
+- Write in {language}. Length: as long as the sources support, and no longer. Treat every source in depth (method, set-up, results with their numbers) and compare the sources explicitly. When the material is exhausted, stop. Never pad with repetition, generic statements about the field or guesses about what the sources might contain.
+- Keep technical terms that are normally used in English as they are.
 """
 
 
@@ -57,19 +56,29 @@ def source_block(sources: list[dict]) -> str:
     for s in sources:
         c = s["card"]
         year = (s.get("published") or "")[:4] or "n.d."
-        blocks.append(f"[{s['n']}] {s['title']} ({year})\n"
-                      f"Problem: {c['problem']}\nMethod: {c['method']}\n"
-                      f"Findings: {c['findings']}\nLimitations: {c['limitations']}")
+        lines = [f"[{s['n']}] {s['title']} ({year})"]
+        lines += [f"{key.capitalize()}: {c[key]}" for key in ("problem", "method", "setup", "findings", "limitations")
+                  if c.get(key)]
+        blocks.append("\n".join(lines))
     return "\n\n".join(blocks)
+
+
+TOKEN_BUDGET = 7600
 
 
 def build_prompt(sources: list[dict], doc_type: str, lang: str) -> str:
     spec = DOC_TYPES[doc_type]
     return PROMPT.format(label=spec["label"], language=LANGUAGES[lang], sources=source_block(sources),
                          sections="\n".join(f"## {h}" for h in spec["sections"][lang]),
-                         guide=spec["guide"], n=len(sources), words=spec["words"])
+                         guide=spec["guide"], n=len(sources))
 
 
-def write(sources: list[dict], doc_type: str, lang: str, model: str) -> tuple[str, int]:
-    words = DOC_TYPES[doc_type]["words"]
-    return llm.complete(build_prompt(sources, doc_type, lang), model=model, max_tokens=min(5500, words * 3))
+def output_budget(prompt: str) -> int:
+    return max(1500, TOKEN_BUDGET - len(prompt) // 3)
+
+
+def write(sources: list[dict], doc_type: str, lang: str, model: str) -> tuple[str, int, bool, int]:
+    prompt = build_prompt(sources, doc_type, lang)
+    budget = output_budget(prompt)
+    text, tokens, finish = llm.complete(prompt, model=model, max_tokens=budget)
+    return text, tokens, finish == "length", budget

@@ -32,16 +32,34 @@ def chat(prompt: str, model: str, system: str = "", reasoning_effort: str = "low
     return json.loads(response.choices[0].message.content), tokens
 
 
-def complete(prompt: str, model: str, max_tokens: int = 4000, reasoning_effort: str = "low") -> tuple[str, int]:
+def request_overflow(error: Exception) -> Optional[int]:
+    text = str(error)
+    match = re.search(r"Limit (\d+), Requested (\d+)", text)
+    if match and "too large" in text.lower():
+        return int(match.group(2)) - int(match.group(1))
+    return None
+
+
+def complete(prompt: str, model: str, max_tokens: int = 4000, reasoning_effort: str = "low") -> tuple[str, int, str]:
     extra = {"reasoning_effort": reasoning_effort} if "gpt-oss" in model else {}
-    response = _client().chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=max_tokens,
-        **extra,
-    )
+    for attempt in range(2):
+        try:
+            response = _client().chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=max_tokens,
+                **extra,
+            )
+            break
+        except Exception as e:
+            overflow = request_overflow(e)
+            if attempt == 0 and overflow:
+                max_tokens = max(500, max_tokens - overflow - 200)
+                continue
+            raise
+    choice = response.choices[0]
     tokens = response.usage.total_tokens if response.usage else 0
-    return (response.choices[0].message.content or "").strip(), tokens
+    return (choice.message.content or "").strip(), tokens, choice.finish_reason or ""
 
 
 def chat_json(prompt: str, model: str, system: str = "", reasoning_effort: str = "low") -> dict:

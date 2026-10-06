@@ -19,7 +19,7 @@ SECTION_KEYS = {
     "results": ("experiment", "result", "evaluation"),
     "conclusion": ("conclusion", "discussion", "limitation", "summary"),
 }
-BUDGET = {"introduction": 2500, "method": 3000, "results": 2000, "conclusion": 1500}
+BUDGET = {"introduction": 3500, "method": 5000, "results": 3500, "conclusion": 2000}
 _ATOM = {"a": "http://www.w3.org/2005/Atom", "arxiv": "http://arxiv.org/schemas/atom"}
 _PDF_HEADING = re.compile(r"^\s*(?:\d+(?:\.\d+)*\.?|[IVX]+\.)\s+([A-Z][A-Za-z ,&\-]{2,70})\s*$")
 _PDF_PLAIN_HEADING = re.compile(r"^\s*(Abstract|Introduction|Conclusions?|Discussion)\s*$", re.IGNORECASE)

@@ -156,11 +156,11 @@ def test_prompt_follows_type_and_language():
 def _fake_llm(monkeypatch, calls):
     def chat(prompt, model, **kw):
         calls.append(("card", model))
-        return {"problem": "P.", "method": "M.", "findings": "F.", "limitations": "L."}, 100
+        return {"problem": "P.", "method": "M.", "setup": "S.", "findings": "F.", "limitations": "L."}, 100
 
     def complete(prompt, model, **kw):
         calls.append(("write", model))
-        return "# Title\n\n## Introduction\nClaim [1] and [2]. Wrong [5].", 500
+        return "# Title\n\n## Introduction\nClaim [1] and [2]. Wrong [5].", 500, "stop"
 
     monkeypatch.setattr(llm, "chat", chat)
     monkeypatch.setattr(llm, "complete", complete)
@@ -235,3 +235,70 @@ def test_cli_writes_markdown_and_report(tmp_path, monkeypatch):
     assert report["doc_type"] == "synthesis" and report["lang"] == "en"
     assert report["sources"][0]["text_source"] == "pdf"
     assert next(out_dir.glob("*.md")).read_text(encoding="utf-8").startswith("# Title")
+
+
+def test_uncited_paragraphs_are_counted():
+    long_cited = " ".join(["word"] * 30) + " [1]."
+    long_uncited = " ".join(["word"] * 30) + "."
+    text = f"# T\n\n## A\n\n{long_cited}\n\n{long_uncited}\n\n- {long_uncited}\n- short bullet [1]\n\nShort line."
+    _, report = citations.check_and_fix(text, 1)
+    assert report["paragraphs"] == 3 and report["uncited_paragraphs"] == 2
+
+
+def test_prompt_asks_for_needed_length_without_fixed_word_count():
+    sources = [{"n": 1, "title": "T", "published": "2020", "card": dict.fromkeys(cards.FIELDS, "x")}]
+    prompt = writer.build_prompt(sources, "synthesis", "en")
+    assert "Every paragraph and every bullet point" in prompt
+    assert "as long as the sources support, and no longer" in prompt and "Never pad" in prompt
+    assert " words" not in prompt.split("Rules:")[1].replace("words, ", "")
+
+
+def test_output_budget_uses_all_room_under_minute_limit():
+    assert writer.output_budget("x" * 3000) == writer.TOKEN_BUDGET - 1000
+    assert writer.output_budget("x" * 30000) == 1500
+
+
+def test_old_cards_are_regenerated_after_version_change(tmp_path, monkeypatch):
+    calls = []
+    _fake_llm(monkeypatch, calls)
+    cache = connect(tmp_path / "cache.db")
+    cache.execute("CREATE TABLE cards (paper_id TEXT PRIMARY KEY, source TEXT NOT NULL, model TEXT NOT NULL, "
+                  "card TEXT NOT NULL, tokens INTEGER NOT NULL, created_at TEXT NOT NULL)")
+    cache.execute("INSERT INTO cards VALUES ('2005.11401', 'html', 'm', '{\"problem\": \"old\"}', 10, 't')")
+    cards.init_cache(cache)
+    paper = {"id": "2005.11401", "title": "T", "abstract": "A", "license": None}
+    card, meta = cards.get_card(cache, paper, "m", fetcher=lambda pid: fulltext.FullText(pid, "html", []))
+    assert meta["cached"] is False and card["setup"] == "S."
+    card, meta = cards.get_card(cache, paper, "m", fetcher=lambda pid: pytest.fail("önbellekten gelmeli"))
+    assert meta["cached"] is True
+
+
+def test_complete_shrinks_request_when_too_large(monkeypatch):
+    requested = []
+
+    class Choice:
+        finish_reason = "length"
+        message = type("M", (), {"content": " text "})()
+
+    class Completions:
+        def create(self, **kw):
+            requested.append(kw["max_tokens"])
+            if len(requested) == 1:
+                raise Exception("Request too large for model on tokens per minute (TPM): Limit 8000, Requested 9500")
+            return type("R", (), {"choices": [Choice()], "usage": type("U", (), {"total_tokens": 42})()})()
+
+    client = type("C", (), {"chat": type("Ch", (), {"completions": Completions()})()})()
+    monkeypatch.setattr(llm, "_client", lambda: client)
+    text, tokens, finish = llm.complete("p", "openai/gpt-oss-120b", max_tokens=5000)
+    assert requested == [5000, 3300] and (text, tokens, finish) == ("text", 42, "length")
+
+
+def test_truncation_is_reported(tmp_path, monkeypatch):
+    calls = []
+    _fake_llm(monkeypatch, calls)
+    monkeypatch.setattr(llm, "complete", lambda prompt, model, **kw: ("# T\n\nCut off [1", 900, "length"))
+    conn, cache = connect(tmp_path / "p.db"), connect(tmp_path / "c.db")
+    init_db(conn)
+    upsert_papers(conn, [make_row("2005.11401", "RAG", "We combine retrieval.")])
+    out = generate(conn, cache, ["2005.11401"], fetcher=lambda pid: fulltext.FullText(pid, "html", []))
+    assert out["length"]["truncated"] is True and out["length"]["output_budget_tokens"] >= 1500
