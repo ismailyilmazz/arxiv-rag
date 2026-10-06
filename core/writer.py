@@ -8,8 +8,10 @@ DOC_TYPES = {
             "en": ["Introduction", "Background", "Approaches", "Comparison and Discussion", "Open Problems", "Conclusion"],
             "tr": ["Giriş", "Arka Plan", "Yaklaşımlar", "Karşılaştırma ve Tartışma", "Açık Problemler", "Sonuç"],
         },
-        "guide": "Organize the work thematically, compare the approaches explicitly and show where the sources "
-                 "agree or disagree.",
+        "guide": "In 'Approaches', give every source its own level-3 subsection that covers its problem, method, "
+                 "set-up, results with their numbers and limitations, using all relevant details from its card. "
+                 "In 'Comparison and Discussion', compare the sources along design, training and data, efficiency, "
+                 "results and limitations, with a paragraph or a table for each of these dimensions.",
     },
     "proposal": {
         "label": "research proposal",
@@ -19,8 +21,9 @@ DOC_TYPES = {
             "tr": ["Özet", "Problem ve Motivasyon", "İlgili Çalışmalar", "Araştırma Soruları", "Önerilen Yöntem",
                    "Değerlendirme Planı", "Beklenen Katkılar", "Riskler ve Sınırlar"],
         },
-        "guide": "Use the sources to establish the gap. The proposed method must be new and is described as a plan, "
-                 "never as an obtained result.",
+        "guide": "In 'Related Work', discuss every source in its own paragraph with its method and results. Use the "
+                 "sources' limitations to establish the gap. The proposed method must be new and is described as a "
+                 "plan, never as an obtained result; describe its components, data and evaluation in detail.",
     },
     "synthesis": {
         "label": "synthesis report",
@@ -28,7 +31,9 @@ DOC_TYPES = {
             "en": ["Summary", "Key Findings", "Agreements and Differences", "Implications", "Conclusion"],
             "tr": ["Özet", "Temel Bulgular", "Ortak Noktalar ve Farklar", "Çıkarımlar", "Sonuç"],
         },
-        "guide": "Focus on what a reader needs to know from these sources taken together.",
+        "guide": "In 'Key Findings', present the findings of every source with their numbers and conditions. In "
+                 "'Agreements and Differences', compare the sources point by point. Focus on what a reader needs to "
+                 "know from these sources taken together.",
     },
 }
 

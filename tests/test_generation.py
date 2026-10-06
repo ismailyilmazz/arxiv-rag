@@ -302,3 +302,41 @@ def test_truncation_is_reported(tmp_path, monkeypatch):
     upsert_papers(conn, [make_row("2005.11401", "RAG", "We combine retrieval.")])
     out = generate(conn, cache, ["2005.11401"], fetcher=lambda pid: fulltext.FullText(pid, "html", []))
     assert out["length"]["truncated"] is True and out["length"]["output_budget_tokens"] >= 1500
+
+
+def test_card_retries_on_broken_json_then_uses_strong_model(tmp_path, monkeypatch):
+    tried = []
+
+    def chat(prompt, model, **kw):
+        tried.append(model)
+        if model == "small":
+            raise Exception("Error code: 400 - json_validate_failed")
+        return {"problem": "P.", "method": "M.", "setup": "S.", "findings": "F.", "limitations": "L."}, 100
+
+    monkeypatch.setattr(llm, "chat", chat)
+    monkeypatch.setattr(cards.config, "LLM_WRITE_MODEL", "big")
+    cache = connect(tmp_path / "cache.db")
+    cards.init_cache(cache)
+    paper = {"id": "2004.04906", "title": "DPR", "abstract": "A", "license": None}
+    card, meta = cards.get_card(cache, paper, "small", fetcher=lambda pid: fulltext.FullText(pid, "html", []))
+    assert tried == ["small", "small", "big"] and card["method"] == "M."
+    assert cache.execute("SELECT model FROM cards").fetchone()[0] == "big"
+
+
+def test_card_gives_up_after_three_broken_answers_and_other_errors_pass_through(tmp_path, monkeypatch):
+    cache = connect(tmp_path / "cache.db")
+    cards.init_cache(cache)
+    paper = {"id": "2004.04906", "title": "DPR", "abstract": "A", "license": None}
+    fetcher = lambda pid: fulltext.FullText(pid, "html", [])
+    monkeypatch.setattr(llm, "chat", lambda prompt, model, **kw: (_ for _ in ()).throw(Exception("json_validate_failed")))
+    with pytest.raises(ValueError, match="üretilemedi"):
+        cards.get_card(cache, paper, "small", fetcher=fetcher)
+    monkeypatch.setattr(llm, "chat", lambda prompt, model, **kw: (_ for _ in ()).throw(RuntimeError("network")))
+    with pytest.raises(RuntimeError):
+        cards.get_card(cache, paper, "small", fetcher=fetcher)
+
+
+def test_survey_prompt_requires_per_source_coverage():
+    sources = [{"n": 1, "title": "T", "published": "2020", "card": dict.fromkeys(cards.FIELDS, "x")}]
+    prompt = writer.build_prompt(sources, "survey", "en")
+    assert "give every source its own level-3 subsection" in prompt and "efficiency" in prompt

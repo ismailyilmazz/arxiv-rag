@@ -1,0 +1,54 @@
+{
+  "doc_type": "proposal",
+  "lang": "tr",
+  "models": {
+    "card": "openai/gpt-oss-20b",
+    "write": "openai/gpt-oss-120b"
+  },
+  "sources": [
+    {
+      "n": 1,
+      "id": "2005.11401",
+      "title": "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks",
+      "text_source": "html",
+      "cached": true
+    },
+    {
+      "n": 2,
+      "id": "2004.04906",
+      "title": "Dense Passage Retrieval for Open-Domain Question Answering",
+      "text_source": "html",
+      "cached": false
+    },
+    {
+      "n": 3,
+      "id": "2307.03172",
+      "title": "Lost in the Middle: How Language Models Use Long Contexts",
+      "text_source": "html",
+      "cached": false
+    }
+  ],
+  "citations": {
+    "citations_found": 19,
+    "invalid_numbers": [],
+    "uncited_sources": [],
+    "paragraphs": 8,
+    "uncited_paragraphs": 4,
+    "removed_model_references": false
+  },
+  "length": {
+    "words": 1049,
+    "output_budget_tokens": 5115,
+    "truncated": false
+  },
+  "tokens": {
+    "cards": 4752,
+    "write": 4406,
+    "total": 9158
+  },
+  "timings_ms": {
+    "cards": 8783,
+    "write": 6458,
+    "total": 15243
+  }
+}

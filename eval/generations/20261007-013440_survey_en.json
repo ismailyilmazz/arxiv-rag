@@ -1,0 +1,54 @@
+{
+  "doc_type": "survey",
+  "lang": "en",
+  "models": {
+    "card": "openai/gpt-oss-20b",
+    "write": "openai/gpt-oss-120b"
+  },
+  "sources": [
+    {
+      "n": 1,
+      "id": "1701.06538",
+      "title": "Outrageously Large Neural Networks: The Sparsely-Gated Mixture-of-Experts Layer",
+      "text_source": "html",
+      "cached": true
+    },
+    {
+      "n": 2,
+      "id": "2101.03961",
+      "title": "Switch Transformers: Scaling to Trillion Parameter Models with Simple and Efficient Sparsity",
+      "text_source": "html",
+      "cached": true
+    },
+    {
+      "n": 3,
+      "id": "2401.04088",
+      "title": "Mixtral of Experts",
+      "text_source": "html",
+      "cached": true
+    }
+  ],
+  "citations": {
+    "citations_found": 44,
+    "invalid_numbers": [],
+    "uncited_sources": [],
+    "paragraphs": 15,
+    "uncited_paragraphs": 9,
+    "removed_model_references": false
+  },
+  "length": {
+    "words": 1689,
+    "output_budget_tokens": 4871,
+    "truncated": false
+  },
+  "tokens": {
+    "cards": 0,
+    "write": 4850,
+    "total": 4850
+  },
+  "timings_ms": {
+    "cards": 349,
+    "write": 6945,
+    "total": 7295
+  }
+}

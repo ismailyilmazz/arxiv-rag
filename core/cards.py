@@ -3,7 +3,7 @@ import sqlite3
 from datetime import datetime, timezone
 from typing import Callable, Optional
 
-from core import fulltext, llm
+from core import config, fulltext, llm
 
 VERSION = 3
 FIELDS = ("problem", "method", "setup", "findings", "limitations")
@@ -38,6 +38,10 @@ def is_open_license(license_url) -> bool:
     return bool(license_url) and "creativecommons.org" in license_url
 
 
+def is_bad_json(error: Exception) -> bool:
+    return isinstance(error, json.JSONDecodeError) or "json_validate_failed" in str(error)
+
+
 def get_card(cache: sqlite3.Connection, paper: dict, model: str, policy: str = "all",
              fetcher: Optional[Callable[[str], fulltext.FullText]] = None) -> tuple[dict, dict]:
     fetcher = fetcher or fulltext.fetch
@@ -51,10 +55,23 @@ def get_card(cache: sqlite3.Connection, paper: dict, model: str, policy: str = "
     else:
         text_source = fetcher(paper["id"])
     text = fulltext.select_text(text_source.sections, paper["abstract"])
-    data, tokens = llm.chat(PROMPT.format(title=paper["title"], text=text), model=model, max_tokens=2000)
-    card = {key: " ".join(str(data.get(key) or "").split()) for key in FIELDS}
-    if not card["problem"] or not card["method"]:
-        raise ValueError(f"{paper['id']}: okuma kartı eksik döndü")
+    prompt = PROMPT.format(title=paper["title"], text=text)
+    card, tokens, last_error = None, 0, None
+    for attempt_model in (model, model, config.LLM_WRITE_MODEL):
+        try:
+            data, tokens = llm.chat(prompt, model=attempt_model, max_tokens=2000)
+        except Exception as e:
+            if not is_bad_json(e):
+                raise
+            last_error = e
+            continue
+        candidate = {key: " ".join(str(data.get(key) or "").split()) for key in FIELDS}
+        if candidate["problem"] and candidate["method"]:
+            card, model = candidate, attempt_model
+            break
+        last_error = ValueError("eksik alanlar")
+    if card is None:
+        raise ValueError(f"{paper['id']}: okuma kartı üretilemedi ({type(last_error).__name__})")
 
     cache.execute("INSERT OR REPLACE INTO cards (paper_id, source, model, card, tokens, created_at, version) "
                   "VALUES (?, ?, ?, ?, ?, ?, ?)",
