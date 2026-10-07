@@ -58,7 +58,7 @@ def generate(conn: sqlite3.Connection, cache: sqlite3.Connection, paper_ids: lis
 
     draft, write_tokens, sections = writer.write_document(sources, doc_type, lang, write_model)
     t_write = time.perf_counter()
-    body, report = citations.check_and_fix(draft, len(sources))
+    body, report = citations.check_and_fix(draft, len(sources), tuple(writer.uncited_allowed(doc_type, lang)))
     markdown = body.rstrip() + "\n\n" + citations.bibliography(sources, lang)
 
     return {

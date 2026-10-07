@@ -169,6 +169,25 @@ olduğu için uzun metinlerde tahmin ve dolgu görüldü; kartlar zenginleştiri
 kaldırıldı ("gerektiği kadar"). Tek istekte model kart malzemesini eksiksiz kullanıp yaklaşık 1.000-1.700
 kelimede durdu (ölçüm); ortalama bir arXiv makalesi uzunluğu için bölüm bölüm yazıma geçildi.
 
+Bölüm bölüm yazımla kabul testi (aynı konular, ölçüm):
+
+| tür / dil | uzunluk | yazım isteği | kesilen bölüm | tekrar eden 8 kelimelik dizi | geçersiz atıf | token / süre |
+|---|---|---|---|---|---|---|
+| survey / en | 3.987 kelime | 8 | 0 | 0 | 0 | 20,5 bin / 4,7 dk |
+| proposal / tr | 3.187 kelime | 10 | 0 | 0 | 0 | 32,4 bin / 7,7 dk |
+| synthesis / en | 2.695 kelime | 7 | 0 | 0 | 0 | 20,2 bin / 4,7 dk |
+
+Atıf ölçümü bölümleri ayırır: plan ve özet bölümleri (önerilen yöntem, değerlendirme planı, katkılar,
+riskler, özet, sonuç) atıfsız olabilir; diğer bölümlerde her paragraf atıflı olmalıdır. Kaynakların
+sınırlarından türetilen bölümlerde (açık problemler, çıkarımlar) her nokta kaynağına bağlanır.
+
+Açık konular:
+- İndirme şimdilik .md; PDF dışa aktarma Adım 6'dan sonra eklenecek.
+- Genişlik: tarama türü sadece seçilen kaynakları derinlemesine işler ve bunu girişte açıkça belirtir
+  (insan değerlendirmesi: "üç kilometre taşının iyi kurgulanmış incelemesi, ama alanın genişliğini
+  kapsamıyor"). İleride arama hattıyla seçilen makalelere en yakın makaleler bulunup özet düzeyinde
+  "bağlam kaynağı" olarak eklenecek: seçilenler derinlik, bağlam kaynakları genişlik sağlayacak.
+
 ## Ölçümler
 
 Değerlendirme seti: 730 sorgu (300 başlık, 150+150 sentetik İngilizce/Türkçe, 30 elle yazılmış Türkçe,

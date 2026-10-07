@@ -18,7 +18,7 @@ def numbers_in(group: str) -> list[int]:
     return out
 
 
-def check_and_fix(markdown: str, n_sources: int) -> tuple[str, dict]:
+def check_and_fix(markdown: str, n_sources: int, allowed_uncited: tuple = ()) -> tuple[str, dict]:
     heading = _REFERENCES_HEADING.search(markdown)
     removed_references = heading is not None
     if heading:
@@ -33,13 +33,17 @@ def check_and_fix(markdown: str, n_sources: int) -> tuple[str, dict]:
         return f"[{', '.join(str(n) for n in dict.fromkeys(good))}]" if good else ""
 
     fixed = _CITE.sub(fix, markdown)
-    substantive, uncited, context, previous = 0, 0, False, ""
+    substantive, uncited, context, previous, exempt = 0, 0, False, "", False
     for block in re.split(r"\n\s*\n|\n(?=\s*[-*] )", fixed):
         stripped = block.strip()
         if stripped.startswith("#"):
             level = len(stripped) - len(stripped.lstrip("#"))
+            if level == 2:
+                exempt = stripped[2:].strip() in allowed_uncited
             context = level >= 3 and bool(_CITE.search(stripped))
             previous = ""
+            continue
+        if exempt:
             continue
         if len(stripped.split()) >= MIN_PARAGRAPH_WORDS:
             substantive += 1

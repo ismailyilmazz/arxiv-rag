@@ -385,3 +385,24 @@ def test_minute_window_waits_before_exceeding_limit(monkeypatch):
     clock[0] = 10.0
     waited = llm.reserve("m", 5000)
     assert waited == pytest.approx(50.0) and sleeps == [pytest.approx(50.0)]
+
+
+def test_plan_and_summary_sections_are_not_counted_as_uncited():
+    long = " ".join(["word"] * 30) + "."
+    text = f"## Önerilen Yöntem\n\n{long}\n\n## İlgili Çalışmalar\n\n{long}\n\n{long} [1]"
+    allowed = tuple(writer.uncited_allowed("proposal", "tr"))
+    assert "Önerilen Yöntem" in allowed and "İlgili Çalışmalar" not in allowed
+    _, report = citations.check_and_fix(text, 1, allowed)
+    assert report["paragraphs"] == 2 and report["uncited_paragraphs"] == 1
+
+
+def test_derived_sections_ask_to_tie_points_to_sources():
+    open_problems = [s for s in writer.DOC_TYPES["survey"]["sections"] if s["key"] == "open"][0]
+    implications = [s for s in writer.DOC_TYPES["synthesis"]["sections"] if s["key"] == "implications"][0]
+    assert "with [n]" in open_problems["task"] and "with [n]" in implications["task"]
+
+
+def test_survey_states_its_scope_honestly():
+    intro = writer.DOC_TYPES["survey"]["sections"][0]
+    assert writer.DOC_TYPES["survey"]["label"] == "focused literature review"
+    assert "selected sources rather than the whole field" in intro["task"]

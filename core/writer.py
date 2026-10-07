@@ -9,19 +9,19 @@ STYLE = ("Write complete sentences, each with an explicit subject and a finite v
 TOKEN_BUDGET = 7600
 
 
-def section(key, en, tr, material, task, max_tokens, last=False):
+def section(key, en, tr, material, task, max_tokens, last=False, cited=True):
     return {"key": key, "title": {"en": en, "tr": tr}, "material": material, "task": task,
-            "max_tokens": max_tokens, "last": last}
+            "max_tokens": max_tokens, "last": last, "cited": cited}
 
 
 DOC_TYPES = {
-    "survey": {"label": "literature survey", "sections": [
+    "survey": {"label": "focused literature review", "sections": [
         section("intro", "Introduction", "Giriş", ["brief"],
-                "Motivate the topic, define its scope, state what this survey covers and outline the following "
-                "sections.", 1500),
+                "Motivate the topic, state clearly that this review covers the selected sources rather than the "
+                "whole field, and outline the following sections.", 1500),
         section("background", "Background", "Arka Plan", ["brief"],
                 "Explain the concepts, terminology and earlier ideas a reader needs before the individual "
-                "approaches.", 1500),
+                "approaches, and cite the source each concept comes from.", 1500),
         section("approaches", "Approaches", "Yaklaşımlar", ["source"],
                 "Describe this source in depth: the problem it addresses, how its method works including the key "
                 "design choices, its experimental set-up, its results with their exact numbers and its stated "
@@ -30,17 +30,18 @@ DOC_TYPES = {
                 "Compare the sources along design, training and data, efficiency, results and limitations. Use a "
                 "level-3 heading for each dimension and point out agreements, disagreements and trade-offs.", 2500),
         section("open", "Open Problems", "Açık Problemler", ["limits"],
-                "Derive open problems and research directions from the limitations and gaps of the sources.", 1500),
+                "Derive open problems and research directions from the limitations and gaps of the sources. Tie "
+                "every problem to the source or sources whose limitation motivates it, with [n].", 1500),
         section("conclusion", "Conclusion", "Sonuç", ["written"],
-                "Summarize the main insights of this survey without introducing new claims.", 1000),
+                "Summarize the main insights of this survey without introducing new claims.", 1000, cited=False),
     ]},
     "proposal": {"label": "research proposal", "sections": [
         section("abstract", "Abstract", "Özet", ["written"],
                 "Write the abstract of the proposal: the problem, the gap, the proposed approach, the evaluation and "
-                "the expected contributions, in one or two paragraphs.", 800, last=True),
+                "the expected contributions, in one or two paragraphs.", 800, last=True, cited=False),
         section("problem", "Problem and Motivation", "Problem ve Motivasyon", ["brief", "limits"],
                 "State the problem and why it matters; use the sources to show what is already solved and what "
-                "remains open.", 1500),
+                "remains open, citing the source behind every statement.", 1500),
         section("related", "Related Work", "İlgili Çalışmalar", ["source"],
                 "Discuss this source as related work: its method, set-up and results with their numbers, and the "
                 "limitation that matters for this proposal.", 2000),
@@ -48,27 +49,29 @@ DOC_TYPES = {
                 "Formulate three to five research questions that follow from the gaps, and explain each one.", 1200),
         section("method", "Proposed Method", "Önerilen Yöntem", ["full", "written"],
                 "Describe the proposed new method as a plan: its components, data, training and how it answers each "
-                "research question. Never present results.", 2500),
+                "research question. Never present results.", 2500, cited=False),
         section("evaluation", "Evaluation Plan", "Değerlendirme Planı", ["full", "written"],
                 "Describe the evaluation plan: data sets, baselines taken from the sources, metrics and ablations.",
-                1800),
+                1800, cited=False),
         section("contributions", "Expected Contributions", "Beklenen Katkılar", ["written"],
-                "State the expected contributions of the proposed work.", 1000),
+                "State the expected contributions of the proposed work.", 1000, cited=False),
         section("risks", "Risks and Limitations", "Riskler ve Sınırlar", ["written", "limits"],
-                "Discuss the risks and limitations of the plan and how they will be mitigated.", 1200),
+                "Discuss the risks and limitations of the plan and how they will be mitigated.", 1200, cited=False),
     ]},
     "synthesis": {"label": "synthesis report", "sections": [
         section("summary", "Summary", "Özet", ["written"],
-                "Summarize what these sources show when taken together, in one or two paragraphs.", 800, last=True),
+                "Summarize what these sources show when taken together, in one or two paragraphs.", 800, last=True,
+                cited=False),
         section("findings", "Key Findings", "Temel Bulgular", ["source"],
                 "Present the findings of this source with their numbers and conditions, and the evidence behind "
                 "them.", 2000),
         section("agreements", "Agreements and Differences", "Ortak Noktalar ve Farklar", ["full"],
                 "Compare the sources point by point: where they agree, where they differ and why.", 2000),
         section("implications", "Implications", "Çıkarımlar", ["full", "written"],
-                "Discuss the implications of these findings for research and practice.", 1500),
+                "Discuss the implications of these findings for research and practice. Tie every implication to "
+                "the findings it builds on, with [n].", 1500),
         section("conclusion", "Conclusion", "Sonuç", ["written"],
-                "Conclude the report without introducing new claims.", 800),
+                "Conclude the report without introducing new claims.", 800, cited=False),
     ]},
 }
 
@@ -177,3 +180,7 @@ def write_document(sources: list[dict], doc_type: str, lang: str, model: str) ->
     title = title.strip().strip('"').strip("#").strip() or spec["label"].title()
     body = "\n\n".join(f"## {s['title'][lang]}\n\n{parts[s['key']]}" for s in spec["sections"])
     return f"# {title}\n\n{body}\n", total, report
+
+
+def uncited_allowed(doc_type: str, lang: str) -> list[str]:
+    return [sec["title"][lang] for sec in DOC_TYPES[doc_type]["sections"] if not sec["cited"]]
