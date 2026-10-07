@@ -122,20 +122,32 @@ def fetch(paper_id: str) -> FullText:
     return FullText(paper_id, "abstract", [])
 
 
-def select_text(sections: list[tuple[str, str]], abstract: str) -> str:
-    parts = [f"Abstract: {_clean(abstract)}"]
-    used = set()
+EXCERPT_BUDGET = {"introduction": 1500, "method": 4500, "results": 3500, "conclusion": 0}
+
+
+def _pick(sections: list[tuple[str, str]], budget: dict[str, int]) -> list[str]:
+    parts, used = [], set()
     for key, words in SECTION_KEYS.items():
+        if not budget.get(key):
+            continue
         for i, (title, text) in enumerate(sections):
             if i not in used and title != "Abstract" and any(w in title.lower() for w in words):
-                parts.append(f"{title}: {text[:BUDGET[key]]}")
+                parts.append(f"{title}: {text[:budget[key]]}")
                 used.add(i)
                 break
-    if len(parts) == 1:
-        body = " ".join(text for title, text in sections if title != "Abstract")[:sum(BUDGET.values())]
+    if not parts:
+        body = " ".join(text for title, text in sections if title != "Abstract")[:sum(budget.values())]
         if body:
             parts.append(f"Body: {body}")
-    return "\n\n".join(parts)
+    return parts
+
+
+def select_text(sections: list[tuple[str, str]], abstract: str) -> str:
+    return "\n\n".join([f"Abstract: {_clean(abstract)}", *_pick(sections, BUDGET)])
+
+
+def excerpt(sections: list[tuple[str, str]]) -> str:
+    return "\n\n".join(_pick(sections, EXCERPT_BUDGET))
 
 
 def fetch_metadata(paper_ids: list[str]) -> dict[str, dict]:

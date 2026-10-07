@@ -33,15 +33,27 @@ def check_and_fix(markdown: str, n_sources: int) -> tuple[str, dict]:
         return f"[{', '.join(str(n) for n in dict.fromkeys(good))}]" if good else ""
 
     fixed = _CITE.sub(fix, markdown)
-    substantive = [block for block in re.split(r"\n\s*\n|\n(?=\s*[-*] )", fixed)
-                   if not block.lstrip().startswith("#") and len(block.split()) >= MIN_PARAGRAPH_WORDS]
-    uncited = [block for block in substantive if not _CITE.search(block)]
+    substantive, uncited, context, previous = 0, 0, False, ""
+    for block in re.split(r"\n\s*\n|\n(?=\s*[-*] )", fixed):
+        stripped = block.strip()
+        if stripped.startswith("#"):
+            level = len(stripped) - len(stripped.lstrip("#"))
+            context = level >= 3 and bool(_CITE.search(stripped))
+            previous = ""
+            continue
+        if len(stripped.split()) >= MIN_PARAGRAPH_WORDS:
+            substantive += 1
+            lead_in = previous.endswith(":") and bool(_CITE.search(previous))
+            if not (_CITE.search(stripped) or context or lead_in):
+                uncited += 1
+        if not stripped.startswith(("-", "*")):
+            previous = stripped
     report = {
         "citations_found": len(_CITE.findall(markdown)),
         "invalid_numbers": invalid,
         "uncited_sources": sorted(set(range(1, n_sources + 1)) - cited),
-        "paragraphs": len(substantive),
-        "uncited_paragraphs": len(uncited),
+        "paragraphs": substantive,
+        "uncited_paragraphs": uncited,
         "removed_model_references": removed_references,
     }
     return fixed, report

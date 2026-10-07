@@ -1,0 +1,115 @@
+{
+  "doc_type": "proposal",
+  "lang": "tr",
+  "models": {
+    "card": "openai/gpt-oss-20b",
+    "write": "openai/gpt-oss-120b"
+  },
+  "sources": [
+    {
+      "n": 1,
+      "id": "2005.11401",
+      "title": "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks",
+      "text_source": "html",
+      "cached": true
+    },
+    {
+      "n": 2,
+      "id": "2004.04906",
+      "title": "Dense Passage Retrieval for Open-Domain Question Answering",
+      "text_source": "html",
+      "cached": true
+    },
+    {
+      "n": 3,
+      "id": "2307.03172",
+      "title": "Lost in the Middle: How Language Models Use Long Contexts",
+      "text_source": "html",
+      "cached": true
+    }
+  ],
+  "citations": {
+    "citations_found": 49,
+    "invalid_numbers": [],
+    "uncited_sources": [],
+    "paragraphs": 44,
+    "uncited_paragraphs": 9,
+    "removed_model_references": false
+  },
+  "length": {
+    "words": 3187,
+    "truncated": false
+  },
+  "sections": [
+    {
+      "section": "problem",
+      "source": null,
+      "tokens": 2043,
+      "truncated": false
+    },
+    {
+      "section": "related",
+      "source": 1,
+      "tokens": 3832,
+      "truncated": false
+    },
+    {
+      "section": "related",
+      "source": 2,
+      "tokens": 2582,
+      "truncated": false
+    },
+    {
+      "section": "related",
+      "source": 3,
+      "tokens": 2952,
+      "truncated": false
+    },
+    {
+      "section": "questions",
+      "source": null,
+      "tokens": 1993,
+      "truncated": false
+    },
+    {
+      "section": "method",
+      "source": null,
+      "tokens": 3682,
+      "truncated": false
+    },
+    {
+      "section": "evaluation",
+      "source": null,
+      "tokens": 4505,
+      "truncated": false
+    },
+    {
+      "section": "contributions",
+      "source": null,
+      "tokens": 2608,
+      "truncated": false
+    },
+    {
+      "section": "risks",
+      "source": null,
+      "tokens": 3521,
+      "truncated": false
+    },
+    {
+      "section": "abstract",
+      "source": null,
+      "tokens": 3157,
+      "truncated": false
+    }
+  ],
+  "tokens": {
+    "cards": 0,
+    "write": 32375,
+    "total": 32375
+  },
+  "timings_ms": {
+    "cards": 16351,
+    "write": 446187,
+    "total": 462550
+  }
+}

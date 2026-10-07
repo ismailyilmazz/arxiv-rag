@@ -1,5 +1,6 @@
 import io
 import json
+import re
 import sys
 
 import pytest
@@ -146,13 +147,6 @@ def test_bibliography_is_built_from_metadata():
            "https://arxiv.org/abs/2401.04088" in bib
 
 
-def test_prompt_follows_type_and_language():
-    sources = [{"n": 1, "title": "T", "published": "2020", "card": dict.fromkeys(cards.FIELDS, "x")}]
-    prompt = writer.build_prompt(sources, "proposal", "tr")
-    assert "research proposal in Turkish" in prompt and "## Önerilen Yöntem" in prompt
-    assert "Use only the numbers 1 to 1" in prompt
-
-
 def _fake_llm(monkeypatch, calls):
     def chat(prompt, model, **kw):
         calls.append(("card", model))
@@ -160,41 +154,12 @@ def _fake_llm(monkeypatch, calls):
 
     def complete(prompt, model, **kw):
         calls.append(("write", model))
-        return "# Title\n\n## Introduction\nClaim [1] and [2]. Wrong [5].", 500, "stop"
+        if "Return only the title" in prompt:
+            return "My Title", 50, "stop"
+        return "The method improves results [1] and [2]. Wrong [5].", 500, "stop"
 
     monkeypatch.setattr(llm, "chat", chat)
     monkeypatch.setattr(llm, "complete", complete)
-
-
-def test_generate_end_to_end_and_cache(tmp_path, monkeypatch):
-    calls, fetched = [], []
-    _fake_llm(monkeypatch, calls)
-    conn = connect(tmp_path / "papers.db")
-    init_db(conn)
-    upsert_papers(conn, [make_row("2005.11401", "Retrieval-Augmented Generation", "We combine retrieval.")])
-    cache = connect(tmp_path / "cache.db")
-
-    def fetcher(pid):
-        fetched.append(pid)
-        return fulltext.FullText(pid, "html", [("1 Introduction", "intro")])
-
-    meta = lambda ids: {"2401.04088": {"title": "Mixtral of Experts", "abstract": "We introduce Mixtral.",
-                                        "authors": "Albert Q. Jiang", "published": "2024-01-08",
-                                        "primary_category": "cs.LG", "license": None}}
-    out = generate(conn, cache, ["2005.11401", "2401.04088v1"], doc_type="survey", lang="en",
-                   card_model="small", write_model="big", fetcher=fetcher, metadata_fetcher=meta)
-    assert out["citations"]["invalid_numbers"] == [5]
-    assert "[5]" not in out["markdown"]
-    assert out["markdown"].rstrip().endswith("[2] Albert Q. Jiang (2024). Mixtral of Experts. arXiv:2401.04088. "
-                                             "https://arxiv.org/abs/2401.04088")
-    assert out["tokens"] == {"cards": 200, "write": 500, "total": 700}
-    assert [m for k, m in calls if k == "card"] == ["small", "small"] and ("write", "big") in calls
-
-    again = generate(conn, cache, ["2005.11401", "2401.04088"], doc_type="synthesis", lang="tr",
-                     card_model="small", write_model="big", fetcher=fetcher, metadata_fetcher=meta)
-    assert again["tokens"]["cards"] == 0 and all(s["cached"] for s in again["sources"])
-    assert fetched == ["2005.11401", "2401.04088"]
-    assert "## Kaynakça" in again["markdown"]
 
 
 def test_cc_policy_uses_abstract_for_closed_license(tmp_path, monkeypatch):
@@ -234,7 +199,7 @@ def test_cli_writes_markdown_and_report(tmp_path, monkeypatch):
     report = json.loads(next(out_dir.glob("*.json")).read_text(encoding="utf-8"))
     assert report["doc_type"] == "synthesis" and report["lang"] == "en"
     assert report["sources"][0]["text_source"] == "pdf"
-    assert next(out_dir.glob("*.md")).read_text(encoding="utf-8").startswith("# Title")
+    assert next(out_dir.glob("*.md")).read_text(encoding="utf-8").startswith("# My Title")
 
 
 def test_uncited_paragraphs_are_counted():
@@ -243,19 +208,6 @@ def test_uncited_paragraphs_are_counted():
     text = f"# T\n\n## A\n\n{long_cited}\n\n{long_uncited}\n\n- {long_uncited}\n- short bullet [1]\n\nShort line."
     _, report = citations.check_and_fix(text, 1)
     assert report["paragraphs"] == 3 and report["uncited_paragraphs"] == 2
-
-
-def test_prompt_asks_for_needed_length_without_fixed_word_count():
-    sources = [{"n": 1, "title": "T", "published": "2020", "card": dict.fromkeys(cards.FIELDS, "x")}]
-    prompt = writer.build_prompt(sources, "synthesis", "en")
-    assert "Every paragraph and every bullet point" in prompt
-    assert "as long as the sources support, and no longer" in prompt and "Never pad" in prompt
-    assert " words" not in prompt.split("Rules:")[1].replace("words, ", "")
-
-
-def test_output_budget_uses_all_room_under_minute_limit():
-    assert writer.output_budget("x" * 3000) == writer.TOKEN_BUDGET - 1000
-    assert writer.output_budget("x" * 30000) == 1500
 
 
 def test_old_cards_are_regenerated_after_version_change(tmp_path, monkeypatch):
@@ -293,17 +245,6 @@ def test_complete_shrinks_request_when_too_large(monkeypatch):
     assert requested == [5000, 3300] and (text, tokens, finish) == ("text", 42, "length")
 
 
-def test_truncation_is_reported(tmp_path, monkeypatch):
-    calls = []
-    _fake_llm(monkeypatch, calls)
-    monkeypatch.setattr(llm, "complete", lambda prompt, model, **kw: ("# T\n\nCut off [1", 900, "length"))
-    conn, cache = connect(tmp_path / "p.db"), connect(tmp_path / "c.db")
-    init_db(conn)
-    upsert_papers(conn, [make_row("2005.11401", "RAG", "We combine retrieval.")])
-    out = generate(conn, cache, ["2005.11401"], fetcher=lambda pid: fulltext.FullText(pid, "html", []))
-    assert out["length"]["truncated"] is True and out["length"]["output_budget_tokens"] >= 1500
-
-
 def test_card_retries_on_broken_json_then_uses_strong_model(tmp_path, monkeypatch):
     tried = []
 
@@ -336,7 +277,111 @@ def test_card_gives_up_after_three_broken_answers_and_other_errors_pass_through(
         cards.get_card(cache, paper, "small", fetcher=fetcher)
 
 
-def test_survey_prompt_requires_per_source_coverage():
-    sources = [{"n": 1, "title": "T", "published": "2020", "card": dict.fromkeys(cards.FIELDS, "x")}]
-    prompt = writer.build_prompt(sources, "survey", "en")
-    assert "give every source its own level-3 subsection" in prompt and "efficiency" in prompt
+def _sources(n=2):
+    card = {"problem": "P.", "method": "M.", "setup": "S.", "findings": "F.", "limitations": "L."}
+    return [{"n": i, "id": f"2005.1140{i}", "title": f"Paper {i}", "published": "2020-01-01", "card": card,
+             "excerpt": f"2 Method: details of paper {i}"} for i in range(1, n + 1)]
+
+
+def test_survey_is_written_section_by_section_with_one_call_per_source(monkeypatch):
+    prompts = []
+    monkeypatch.setattr(llm, "complete", lambda prompt, model, max_tokens: (
+        prompts.append(prompt) or ("Title X" if "Return only the title" in prompt else "Body text [1]."), 10, "stop"))
+    md, tokens, report = writer.write_document(_sources(2), "survey", "en", "big")
+    headings = [line for line in md.splitlines() if line.startswith("#")]
+    assert headings == ["# Title X", "## Introduction", "## Background", "## Approaches",
+                        "### [1] Paper 1 (2020)", "### [2] Paper 2 (2020)", "## Comparison and Discussion",
+                        "## Open Problems", "## Conclusion"]
+    assert len(prompts) == 8 and tokens == 80 and len(report) == 7
+    source_prompts = [p for p in prompts if "the subsection about source" in p]
+    assert "details of paper 1" in source_prompts[0] and "details of paper 2" not in source_prompts[0]
+    assert "finite verb" in prompts[0] and "ends with its predicate" in prompts[0]
+
+
+def test_abstract_is_written_last_but_shown_first(monkeypatch):
+    targets = []
+
+    def complete(prompt, model, max_tokens):
+        if "Return only the title" in prompt:
+            return "T", 1, "stop"
+        targets.append(re.search(r"Now write: (.*)", prompt).group(1))
+        return f"text for {targets[-1]} [1]", 1, "stop"
+
+    monkeypatch.setattr(llm, "complete", complete)
+    md, _, _ = writer.write_document(_sources(1), "proposal", "tr", "big")
+    assert targets[-1] == 'the section "Özet"'
+    assert md.index("## Özet") < md.index("## Problem ve Motivasyon")
+
+
+def test_later_sections_see_what_was_written(monkeypatch):
+    prompts = []
+    monkeypatch.setattr(llm, "complete", lambda prompt, model, max_tokens: (
+        prompts.append(prompt) or ("T" if "Return only the title" in prompt else "Intro sentence here [1]. More."),
+        1, "stop"))
+    writer.write_document(_sources(1), "synthesis", "en", "big")
+    conclusion = [p for p in prompts if 'Now write: the section "Conclusion"' in p][0]
+    assert "Key Findings:" in conclusion and "Intro sentence here [1]." in conclusion
+    assert "Nothing yet." in prompts[0]
+
+
+def test_section_budget_shrinks_with_prompt_and_truncation_is_reported(monkeypatch):
+    seen = []
+    monkeypatch.setattr(llm, "complete", lambda prompt, model, max_tokens: (
+        seen.append(max_tokens) or ("T", 1, "stop") if "Return only the title" in prompt else
+        (seen.append(max_tokens) or ("cut [1]", 1, "length"))))
+    sources = _sources(1)
+    sources[0]["excerpt"] = "x" * 21000
+    _, _, report = writer.write_document(sources, "synthesis", "en", "big")
+    assert min(seen[:-1]) >= 400 and seen[0] <= writer.TOKEN_BUDGET - 7000
+    assert all(r["truncated"] for r in report)
+
+
+def test_generate_end_to_end_with_text_cache(tmp_path, monkeypatch):
+    calls, fetched = [], []
+    _fake_llm(monkeypatch, calls)
+    conn = connect(tmp_path / "papers.db")
+    init_db(conn)
+    upsert_papers(conn, [make_row("2005.11401", "Retrieval-Augmented Generation", "We combine retrieval.")])
+    cache = connect(tmp_path / "cache.db")
+
+    def fetcher(pid):
+        fetched.append(pid)
+        return fulltext.FullText(pid, "html", [("2 Method", "the retriever is DPR")])
+
+    meta = lambda ids: {"2401.04088": {"title": "Mixtral of Experts", "abstract": "We introduce Mixtral.",
+                                        "authors": "Albert Q. Jiang", "published": "2024-01-08",
+                                        "primary_category": "cs.LG", "license": None}}
+    out = generate(conn, cache, ["2005.11401", "2401.04088v1"], doc_type="synthesis", lang="en",
+                   card_model="small", write_model="big", fetcher=fetcher, metadata_fetcher=meta)
+    assert out["markdown"].startswith("# My Title")
+    assert out["citations"]["invalid_numbers"] and "[5]" not in out["markdown"]
+    assert out["markdown"].rstrip().endswith("[2] Albert Q. Jiang (2024). Mixtral of Experts. arXiv:2401.04088. "
+                                             "https://arxiv.org/abs/2401.04088")
+    assert out["tokens"]["cards"] == 200 and len(out["sections"]) == 6
+    assert fetched == ["2005.11401", "2401.04088"]
+
+    again = generate(conn, cache, ["2005.11401", "2401.04088"], doc_type="survey", lang="tr",
+                     card_model="small", write_model="big", fetcher=fetcher, metadata_fetcher=meta)
+    assert again["tokens"]["cards"] == 0 and fetched == ["2005.11401", "2401.04088"]
+    assert "## Kaynakça" in again["markdown"] and "## Yaklaşımlar" in again["markdown"]
+
+
+def test_citation_in_subsection_heading_or_lead_in_counts():
+    long = " ".join(["word"] * 30) + "."
+    text = (f"## Approaches\n\n### [1] Paper (2020)\n\n{long}\n\n## Findings\n\nResults of [2]:\n- {long}\n\n"
+            f"## Other\n\n{long}")
+    _, report = citations.check_and_fix(text, 2)
+    assert report["paragraphs"] == 3 and report["uncited_paragraphs"] == 1
+
+
+def test_minute_window_waits_before_exceeding_limit(monkeypatch):
+    clock, sleeps = [0.0], []
+    monkeypatch.setattr(llm.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(llm.time, "sleep", lambda s: (sleeps.append(s), clock.__setitem__(0, clock[0] + s)))
+    monkeypatch.setattr(llm.config, "LLM_TPM", 8000)
+    monkeypatch.setattr(llm, "_WINDOW", llm.defaultdict(llm.deque))
+    assert llm.reserve("m", 5000) == 0.0
+    llm.record("m", 5000)
+    clock[0] = 10.0
+    waited = llm.reserve("m", 5000)
+    assert waited == pytest.approx(50.0) and sleeps == [pytest.approx(50.0)]

@@ -1,11 +1,37 @@
 import json
 import re
+import time
+from collections import defaultdict, deque
 from functools import lru_cache
 from typing import Optional
 
 from openai import OpenAI
 
 from core import config
+
+
+_WINDOW: dict[str, deque] = defaultdict(deque)
+
+
+def reserve(model: str, tokens: int) -> float:
+    limit = config.LLM_TPM
+    if limit <= 0:
+        return 0.0
+    tokens, waited = min(tokens, limit), 0.0
+    while True:
+        now = time.monotonic()
+        window = _WINDOW[model]
+        while window and now - window[0][0] >= 60:
+            window.popleft()
+        if sum(t for _, t in window) + tokens <= limit:
+            return waited
+        pause = max(0.5, 60 - (now - window[0][0]))
+        time.sleep(pause)
+        waited += pause
+
+
+def record(model: str, tokens: int) -> None:
+    _WINDOW[model].append((time.monotonic(), tokens))
 
 
 @lru_cache(maxsize=1)
@@ -20,6 +46,7 @@ def chat(prompt: str, model: str, system: str = "", reasoning_effort: str = "low
     client = _client() if max_retries is None else _client().with_options(max_retries=max_retries)
     messages = [{"role": "system", "content": system}] if system else []
     messages.append({"role": "user", "content": prompt})
+    reserve(model, (len(prompt) + len(system)) // 3 + max_tokens)
     extra = {"reasoning_effort": reasoning_effort} if "gpt-oss" in model else {}
     response = client.chat.completions.create(
         model=model,
@@ -29,6 +56,7 @@ def chat(prompt: str, model: str, system: str = "", reasoning_effort: str = "low
         **extra,
     )
     tokens = response.usage.total_tokens if response.usage else 0
+    record(model, tokens)
     return json.loads(response.choices[0].message.content), tokens
 
 
@@ -43,6 +71,7 @@ def request_overflow(error: Exception) -> Optional[int]:
 def complete(prompt: str, model: str, max_tokens: int = 4000, reasoning_effort: str = "low") -> tuple[str, int, str]:
     extra = {"reasoning_effort": reasoning_effort} if "gpt-oss" in model else {}
     for attempt in range(2):
+        reserve(model, len(prompt) // 3 + max_tokens)
         try:
             response = _client().chat.completions.create(
                 model=model,
@@ -59,6 +88,7 @@ def complete(prompt: str, model: str, max_tokens: int = 4000, reasoning_effort: 
             raise
     choice = response.choices[0]
     tokens = response.usage.total_tokens if response.usage else 0
+    record(model, tokens)
     return (choice.message.content or "").strip(), tokens, choice.finish_reason or ""
 
 

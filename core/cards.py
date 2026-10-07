@@ -28,6 +28,8 @@ def init_cache(conn: sqlite3.Connection) -> None:
     conn.execute("""CREATE TABLE IF NOT EXISTS cards (
         paper_id TEXT PRIMARY KEY, source TEXT NOT NULL, model TEXT NOT NULL,
         card TEXT NOT NULL, tokens INTEGER NOT NULL, created_at TEXT NOT NULL)""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS texts (
+        paper_id TEXT PRIMARY KEY, source TEXT NOT NULL, sections TEXT NOT NULL, created_at TEXT NOT NULL)""")
     columns = {row[1] for row in conn.execute("PRAGMA table_info(cards)")}
     if "version" not in columns:
         conn.execute("ALTER TABLE cards ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
@@ -42,18 +44,29 @@ def is_bad_json(error: Exception) -> bool:
     return isinstance(error, json.JSONDecodeError) or "json_validate_failed" in str(error)
 
 
+def get_text(cache: sqlite3.Connection, paper: dict, policy: str = "all",
+             fetcher: Optional[Callable[[str], fulltext.FullText]] = None) -> fulltext.FullText:
+    if policy == "cc" and not is_open_license(paper.get("license")):
+        return fulltext.FullText(paper["id"], "abstract", [])
+    row = cache.execute("SELECT source, sections FROM texts WHERE paper_id = ?", (paper["id"],)).fetchone()
+    if row is not None:
+        return fulltext.FullText(paper["id"], row[0], [tuple(x) for x in json.loads(row[1])])
+    text = (fetcher or fulltext.fetch)(paper["id"])
+    cache.execute("INSERT OR REPLACE INTO texts VALUES (?, ?, ?, ?)",
+                  (paper["id"], text.source, json.dumps(text.sections, ensure_ascii=False),
+                   datetime.now(timezone.utc).isoformat(timespec="seconds")))
+    cache.commit()
+    return text
+
+
 def get_card(cache: sqlite3.Connection, paper: dict, model: str, policy: str = "all",
              fetcher: Optional[Callable[[str], fulltext.FullText]] = None) -> tuple[dict, dict]:
-    fetcher = fetcher or fulltext.fetch
     row = cache.execute("SELECT card, source FROM cards WHERE paper_id = ? AND version = ?",
                         (paper["id"], VERSION)).fetchone()
     if row is not None:
         return json.loads(row[0]), {"source": row[1], "tokens": 0, "cached": True}
 
-    if policy == "cc" and not is_open_license(paper.get("license")):
-        text_source = fulltext.FullText(paper["id"], "abstract", [])
-    else:
-        text_source = fetcher(paper["id"])
+    text_source = get_text(cache, paper, policy, fetcher)
     text = fulltext.select_text(text_source.sections, paper["abstract"])
     prompt = PROMPT.format(title=paper["title"], text=text)
     card, tokens, last_error = None, 0, None

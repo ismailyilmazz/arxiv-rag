@@ -1,0 +1,103 @@
+{
+  "doc_type": "survey",
+  "lang": "en",
+  "models": {
+    "card": "openai/gpt-oss-20b",
+    "write": "openai/gpt-oss-120b"
+  },
+  "sources": [
+    {
+      "n": 1,
+      "id": "1701.06538",
+      "title": "Outrageously Large Neural Networks: The Sparsely-Gated Mixture-of-Experts Layer",
+      "text_source": "html",
+      "cached": true
+    },
+    {
+      "n": 2,
+      "id": "2101.03961",
+      "title": "Switch Transformers: Scaling to Trillion Parameter Models with Simple and Efficient Sparsity",
+      "text_source": "html",
+      "cached": true
+    },
+    {
+      "n": 3,
+      "id": "2401.04088",
+      "title": "Mixtral of Experts",
+      "text_source": "html",
+      "cached": true
+    }
+  ],
+  "citations": {
+    "citations_found": 36,
+    "invalid_numbers": [],
+    "uncited_sources": [],
+    "paragraphs": 31,
+    "uncited_paragraphs": 11,
+    "removed_model_references": false
+  },
+  "length": {
+    "words": 3987,
+    "truncated": false
+  },
+  "sections": [
+    {
+      "section": "intro",
+      "source": null,
+      "tokens": 1324,
+      "truncated": false
+    },
+    {
+      "section": "background",
+      "source": null,
+      "tokens": 1602,
+      "truncated": false
+    },
+    {
+      "section": "approaches",
+      "source": 1,
+      "tokens": 2949,
+      "truncated": false
+    },
+    {
+      "section": "approaches",
+      "source": 2,
+      "tokens": 4391,
+      "truncated": false
+    },
+    {
+      "section": "approaches",
+      "source": 3,
+      "tokens": 3111,
+      "truncated": false
+    },
+    {
+      "section": "comparison",
+      "source": null,
+      "tokens": 3308,
+      "truncated": false
+    },
+    {
+      "section": "open",
+      "source": null,
+      "tokens": 1751,
+      "truncated": false
+    },
+    {
+      "section": "conclusion",
+      "source": null,
+      "tokens": 1474,
+      "truncated": false
+    }
+  ],
+  "tokens": {
+    "cards": 0,
+    "write": 20500,
+    "total": 20500
+  },
+  "timings_ms": {
+    "cards": 20172,
+    "write": 259599,
+    "total": 279772
+  }
+}

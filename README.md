@@ -136,13 +136,17 @@ kod atıfları doğrular ve kaynakçayı makale bilgilerinden kendisi ekler.
   alan başına 3-8 cümle, metin ne kadar taşıyorsa; sayılar aynen), `data/cache.db` içinde önbellekli. Kart
   sürümü değişince eski kartlar yenilenir. `FULLTEXT_POLICY=cc` ile tam metin sadece CC lisanslı makalelerde
   kullanılır.
-- `core/writer.py`: üç tür (`survey`, `proposal`, `synthesis`) ve iki dil (`en`, `tr`). Sabit uzunluk hedefi
-  yok: metin kaynakların taşıyabildiği kadar uzun olur, dolgu yasak. Cevap payı, dakikalık token sınırının
-  izin verdiği en büyük değerdir (Groq ücretsiz katmanında tek istekte yaklaşık 6-7 sayfa, hesap); metin bu
-  tavana çarparsa raporda "kesildi" olarak işaretlenir. Daha uzun metinler için bölüm bölüm yazım ileride
-  eklenebilir.
+- `core/writer.py`: üç tür (`survey`, `proposal`, `synthesis`) ve iki dil (`en`, `tr`), **bölüm bölüm** yazılır.
+  Her bölüme sadece ona lazım olan malzeme verilir: giriş ve arka plana kartların problem ve yöntem özeti,
+  kaynak alt bölümlerine (her kaynak ayrı istek) kartla birlikte tam metinden yöntem ve sonuç parçaları,
+  karşılaştırmaya bütün kartlar, sonuç ve özete yazılmış bölümlerin özeti. Özet en başta durur ama en son
+  yazılır. Sabit uzunluk hedefi yok, dolgu yasak; her cümle özne ve yüklem içerir. Başlık ayrı bir istekle
+  üretilir. Kesilen bölümler raporda işaretlenir.
+- `core/llm.py`: model başına son 60 saniyenin token kullanımı sayılır; `LLM_TPM` (varsayılan 8000) aşılacaksa
+  istek atılmadan beklenir. Ücretli katmanda bu değer yükseltilebilir.
+- Tam metin `data/cache.db` içindeki `texts` tablosunda önbelleğe alınır, kullanıcıya hiçbir zaman gösterilmez.
 - `core/citations.py`: geçersiz `[n]` numaralarını sayar ve temizler, atıf almayan kaynakları ve atıfsız
-  paragrafları raporlar, kaynakçayı yazar.
+  paragrafları raporlar (alt başlıktaki ya da listeyi açan satırdaki atıf sayılır), kaynakçayı yazar.
 - Modeller: kartlar `LLM_CARD_MODEL` (varsayılan gpt-oss-20b), yazım `LLM_WRITE_MODEL` (varsayılan gpt-oss-120b).
 
 ```
@@ -162,7 +166,8 @@ Kabul kriteri: üç farklı konuda üretim, geçersiz atıf sıfır, kaynakça m
 Dokuz makalenin dokuzu da arXiv HTML'inden geldi (2002 tarihli makaleler dahil). Taramada kaynaklar
 çoğunlukla adıyla anıldığı için paragraf bazında atıf ölçümü eklendi ve prompt güçlendirildi. Kartlar kısa
 olduğu için uzun metinlerde tahmin ve dolgu görüldü; kartlar zenginleştirildi ve sabit uzunluk hedefi
-kaldırıldı ("gerektiği kadar").
+kaldırıldı ("gerektiği kadar"). Tek istekte model kart malzemesini eksiksiz kullanıp yaklaşık 1.000-1.700
+kelimede durdu (ölçüm); ortalama bir arXiv makalesi uzunluğu için bölüm bölüm yazıma geçildi.
 
 ## Ölçümler
 

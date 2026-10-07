@@ -33,8 +33,9 @@ def main() -> None:
           f"atıf almayan kaynak: {c['uncited_sources'] or 'yok'}, "
           f"atıfsız paragraf: {c['uncited_paragraphs']}/{c['paragraphs']}")
     length = result["length"]
-    print(f"Uzunluk: {length['words']} kelime (kaynakça hariç), cevap payı {length['output_budget_tokens']} token"
-          f"{'  UYARI: metin token sınırında kesildi' if length['truncated'] else ''}")
+    cut = [f"{r['section']}{'/' + str(r['source']) if r['source'] else ''}" for r in result["sections"] if r["truncated"]]
+    print(f"Uzunluk: {length['words']} kelime (kaynakça hariç), {len(result['sections'])} yazım isteği"
+          f"{'  UYARI: kesilen bölümler: ' + ', '.join(cut) if cut else ''}")
     print(f"Token: {result['tokens']}  |  süre (ms): {result['timings_ms']}")
     print(f"Çıktı: {args.out_dir / (stem + '.md')}")
 

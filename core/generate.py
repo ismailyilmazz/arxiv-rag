@@ -50,12 +50,13 @@ def generate(conn: sqlite3.Connection, cache: sqlite3.Connection, paper_ids: lis
     for n, pid in enumerate(ids, start=1):
         paper = {"id": pid, **info[pid]}
         card, meta = cards.get_card(cache, paper, card_model, policy=policy, fetcher=fetcher)
+        text = cards.get_text(cache, paper, policy, fetcher)
         card_tokens += meta["tokens"]
-        sources.append({"n": n, "id": pid, **info[pid], "card": card, "text_source": meta["source"],
-                        "cached": meta["cached"]})
+        sources.append({"n": n, "id": pid, **info[pid], "card": card, "excerpt": fulltext.excerpt(text.sections),
+                        "text_source": meta["source"], "cached": meta["cached"]})
     t_cards = time.perf_counter()
 
-    draft, write_tokens, truncated, budget = writer.write(sources, doc_type, lang, write_model)
+    draft, write_tokens, sections = writer.write_document(sources, doc_type, lang, write_model)
     t_write = time.perf_counter()
     body, report = citations.check_and_fix(draft, len(sources))
     markdown = body.rstrip() + "\n\n" + citations.bibliography(sources, lang)
@@ -68,7 +69,8 @@ def generate(conn: sqlite3.Connection, cache: sqlite3.Connection, paper_ids: lis
         "sources": [{"n": s["n"], "id": s["id"], "title": s["title"], "text_source": s["text_source"],
                      "cached": s["cached"]} for s in sources],
         "citations": report,
-        "length": {"words": len(body.split()), "output_budget_tokens": budget, "truncated": truncated},
+        "length": {"words": len(body.split()), "truncated": any(r["truncated"] for r in sections)},
+        "sections": sections,
         "tokens": {"cards": card_tokens, "write": write_tokens, "total": card_tokens + write_tokens},
         "timings_ms": {"cards": round((t_cards - start) * 1000), "write": round((t_write - t_cards) * 1000),
                        "total": round((time.perf_counter() - start) * 1000)},
