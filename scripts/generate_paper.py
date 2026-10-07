@@ -16,9 +16,23 @@ def main() -> None:
     p.add_argument("--db", type=Path, default=config.DB_PATH)
     p.add_argument("--cache-db", type=Path, default=config.CACHE_DB_PATH)
     p.add_argument("--out-dir", type=Path, default=config.DATA_DIR / "generations")
+    p.add_argument("--context", nargs="*", default=[])
+    p.add_argument("--auto-context", type=int, default=0)
+    p.add_argument("--vectors-dir", type=Path, default=config.DATA_DIR / "vectors_dev")
     args = p.parse_args()
 
-    result = generate(connect(args.db), connect(args.cache_db), args.ids, doc_type=args.type, lang=args.lang)
+    conn = connect(args.db)
+    context = list(args.context)
+    if args.auto_context:
+        from core.related import related
+        from core.search_dense import DenseIndex
+        found = related(conn, DenseIndex.load(args.vectors_dir), args.ids, k=args.auto_context)
+        context += [r["id"] for r in found]
+        print("Önerilen bağlam kaynakları:")
+        for r in found:
+            print(f"  {r['id']}  ({r['score']:.3f})  {r['title'][:80]}")
+    result = generate(conn, connect(args.cache_db), args.ids, doc_type=args.type, lang=args.lang,
+                      context_ids=context)
     args.out_dir.mkdir(parents=True, exist_ok=True)
     stem = f"{datetime.now().strftime('%Y%m%d-%H%M%S')}_{args.type}_{args.lang}"
     (args.out_dir / f"{stem}.md").write_text(result["markdown"], encoding="utf-8")
@@ -28,6 +42,8 @@ def main() -> None:
     print(f"Tür: {args.type} | dil: {args.lang} | modeller: {result['models']}")
     for s in result["sources"]:
         print(f"  [{s['n']}] {s['id']}  metin: {s['text_source']}{'  (önbellekten)' if s['cached'] else ''}  {s['title'][:70]}")
+    for c in result["context"]:
+        print(f"  [{c['n']}] {c['id']}  bağlam (özet)  {c['title'][:70]}")
     c = result["citations"]
     print(f"Atıf: {c['citations_found']} bulundu, geçersiz numaralar: {c['invalid_numbers'] or 'yok'}, "
           f"atıf almayan kaynak: {c['uncited_sources'] or 'yok'}, "

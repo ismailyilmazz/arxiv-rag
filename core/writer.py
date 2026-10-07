@@ -16,20 +16,20 @@ def section(key, en, tr, material, task, max_tokens, last=False, cited=True):
 
 DOC_TYPES = {
     "survey": {"label": "focused literature review", "sections": [
-        section("intro", "Introduction", "Giriş", ["brief"],
+        section("intro", "Introduction", "Giriş", ["brief", "context"],
                 "Motivate the topic, state clearly that this review covers the selected sources rather than the "
                 "whole field, and outline the following sections.", 1500),
-        section("background", "Background", "Arka Plan", ["brief"],
+        section("background", "Background", "Arka Plan", ["brief", "context"],
                 "Explain the concepts, terminology and earlier ideas a reader needs before the individual "
                 "approaches, and cite the source each concept comes from.", 1500),
         section("approaches", "Approaches", "Yaklaşımlar", ["source"],
                 "Describe this source in depth: the problem it addresses, how its method works including the key "
                 "design choices, its experimental set-up, its results with their exact numbers and its stated "
                 "limitations. Use the excerpt for details the card does not contain.", 2500),
-        section("comparison", "Comparison and Discussion", "Karşılaştırma ve Tartışma", ["full"],
+        section("comparison", "Comparison and Discussion", "Karşılaştırma ve Tartışma", ["full", "context"],
                 "Compare the sources along design, training and data, efficiency, results and limitations. Use a "
                 "level-3 heading for each dimension and point out agreements, disagreements and trade-offs.", 2500),
-        section("open", "Open Problems", "Açık Problemler", ["limits"],
+        section("open", "Open Problems", "Açık Problemler", ["limits", "context"],
                 "Derive open problems and research directions from the limitations and gaps of the sources. Tie "
                 "every problem to the source or sources whose limitation motivates it, with [n].", 1500),
         section("conclusion", "Conclusion", "Sonuç", ["written"],
@@ -39,13 +39,13 @@ DOC_TYPES = {
         section("abstract", "Abstract", "Özet", ["written"],
                 "Write the abstract of the proposal: the problem, the gap, the proposed approach, the evaluation and "
                 "the expected contributions, in one or two paragraphs.", 800, last=True, cited=False),
-        section("problem", "Problem and Motivation", "Problem ve Motivasyon", ["brief", "limits"],
+        section("problem", "Problem and Motivation", "Problem ve Motivasyon", ["brief", "limits", "context"],
                 "State the problem and why it matters; use the sources to show what is already solved and what "
                 "remains open, citing the source behind every statement.", 1500),
         section("related", "Related Work", "İlgili Çalışmalar", ["source"],
                 "Discuss this source as related work: its method, set-up and results with their numbers, and the "
                 "limitation that matters for this proposal.", 2000),
-        section("questions", "Research Questions", "Araştırma Soruları", ["limits", "written"],
+        section("questions", "Research Questions", "Araştırma Soruları", ["limits", "written", "context"],
                 "Formulate three to five research questions that follow from the gaps, and explain each one.", 1200),
         section("method", "Proposed Method", "Önerilen Yöntem", ["full", "written"],
                 "Describe the proposed new method as a plan: its components, data, training and how it answers each "
@@ -65,9 +65,9 @@ DOC_TYPES = {
         section("findings", "Key Findings", "Temel Bulgular", ["source"],
                 "Present the findings of this source with their numbers and conditions, and the evidence behind "
                 "them.", 2000),
-        section("agreements", "Agreements and Differences", "Ortak Noktalar ve Farklar", ["full"],
+        section("agreements", "Agreements and Differences", "Ortak Noktalar ve Farklar", ["full", "context"],
                 "Compare the sources point by point: where they agree, where they differ and why.", 2000),
-        section("implications", "Implications", "Çıkarımlar", ["full", "written"],
+        section("implications", "Implications", "Çıkarımlar", ["full", "written", "context"],
                 "Discuss the implications of these findings for research and practice. Tie every implication to "
                 "the findings it builds on, with [n].", 1500),
         section("conclusion", "Conclusion", "Sonuç", ["written"],
@@ -84,7 +84,7 @@ Already written:
 {written}
 
 Now write: {target}
-Task: {task}
+Task: {task}{context_rule}
 
 Material:
 {material}
@@ -123,7 +123,19 @@ def summary_of(written: list[tuple[str, str]]) -> str:
     return "\n".join(lines)
 
 
-def material_for(spec: dict, sources: list[dict], written: list[tuple[str, str]], source=None) -> str:
+def brief_abstract(text: str, sentences: int = 2, max_chars: int = 320) -> str:
+    parts = re.split(r"(?<=[.!?])\s+", " ".join((text or "").split()))
+    return " ".join(parts[:sentences])[:max_chars]
+
+
+def context_text(context: list[dict]) -> str:
+    lines = ["Context sources (known only from these short summaries):"]
+    lines += [f"[{c['n']}] {c['title']} ({_year(c)}): {brief_abstract(c.get('abstract'))}" for c in context]
+    return "\n".join(lines)
+
+
+def material_for(spec: dict, sources: list[dict], written: list[tuple[str, str]], source=None,
+                 context: list[dict] = ()) -> str:
     if source is not None:
         parts = [card_text(source)]
         if source.get("excerpt"):
@@ -139,6 +151,8 @@ def material_for(spec: dict, sources: list[dict], written: list[tuple[str, str]]
             parts += [card_text(s, ("findings", "limitations")) for s in sources]
         elif kind == "written":
             parts.append("Written so far:\n" + summary_of(written))
+        elif kind == "context" and context:
+            parts.append(context_text(context))
     return "\n\n".join(parts)
 
 
@@ -148,8 +162,10 @@ def _call(prompt: str, model: str, max_tokens: int) -> tuple[str, int, bool]:
     return text, tokens, finish == "length"
 
 
-def write_document(sources: list[dict], doc_type: str, lang: str, model: str) -> tuple[str, int, list[dict]]:
+def write_document(sources: list[dict], doc_type: str, lang: str, model: str,
+                   context: list[dict] = ()) -> tuple[str, int, list[dict]]:
     spec, language = DOC_TYPES[doc_type], LANGUAGES[lang]
+    n_total = len(sources) + len(context)
     outline = "\n".join(f"## {s['title'][lang]}" for s in spec["sections"])
     order = [s for s in spec["sections"] if not s["last"]] + [s for s in spec["sections"] if s["last"]]
     written, parts, report, total = [], {}, [], 0
@@ -160,10 +176,15 @@ def write_document(sources: list[dict], doc_type: str, lang: str, model: str) ->
                    for s in sources] if sec["material"] == ["source"] else [(f"the section \"{heading}\"", None)]
         chunks = []
         for target, source in targets:
+            with_context = bool(context) and "context" in sec["material"] and source is None
+            rule = (f"\nSources 1 to {len(sources)} are reviewed in depth. Sources {len(sources) + 1} to {n_total} "
+                    f"are context sources known only from short summaries: cite them only for what their summary "
+                    f"states." if with_context else "")
             prompt = SECTION_PROMPT.format(
                 label=spec["label"], language=language, outline=outline, written=summary_of(written),
-                target=target, task=sec["task"], material=material_for(sec, sources, written, source),
-                style=STYLE, n=len(sources))
+                target=target, task=sec["task"], context_rule=rule,
+                material=material_for(sec, sources, written, source, context if with_context else ()),
+                style=STYLE, n=n_total)
             text, tokens, truncated = _call(prompt, model, sec["max_tokens"])
             total += tokens
             report.append({"section": sec["key"], "source": source["n"] if source else None,

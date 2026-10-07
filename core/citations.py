@@ -70,12 +70,21 @@ def format_authors(raw) -> str:
     return ", ".join(names[:3]) + (" et al." if len(names) > 3 else "")
 
 
-def bibliography(sources: list[dict], lang: str) -> str:
+def _entry(s: dict) -> str:
+    year = (s.get("published") or "")[:4] or "n.d."
+    return (f"[{s['n']}] {format_authors(s.get('authors'))} ({year}). {s['title']}. "
+            f"arXiv:{s['id']}. https://arxiv.org/abs/{s['id']}")
+
+
+def bibliography(sources: list[dict], lang: str, context: list[dict] = ()) -> str:
     heading = "## Kaynakça" if lang == "tr" else "## References"
     lines = [heading, ""]
+    if context:
+        lines += ["### İncelenen çalışmalar" if lang == "tr" else "### Reviewed works", ""]
     for s in sources:
-        year = (s.get("published") or "")[:4] or "n.d."
-        lines.append(f"[{s['n']}] {format_authors(s.get('authors'))} ({year}). {s['title']}. "
-                     f"arXiv:{s['id']}. https://arxiv.org/abs/{s['id']}")
-        lines.append("")
+        lines += [_entry(s), ""]
+    if context:
+        lines += ["### Bağlam çalışmaları (yalnızca özet)" if lang == "tr" else "### Context works (summary only)", ""]
+        for c in context:
+            lines += [_entry(c), ""]
     return "\n".join(lines).rstrip() + "\n"

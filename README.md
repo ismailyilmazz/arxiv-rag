@@ -188,6 +188,31 @@ Açık konular:
   kapsamıyor"). İleride arama hattıyla seçilen makalelere en yakın makaleler bulunup özet düzeyinde
   "bağlam kaynağı" olarak eklenecek: seçilenler derinlik, bağlam kaynakları genişlik sağlayacak.
 
+## Adım 6a: Bağlam kaynakları ve yerel veri
+
+**Bağlam kaynakları (genişlik):** Seçilen makaleler derinlik sağlar (tam metin, kart, kendi alt bölümü).
+`core/related.py`, seçilen makalelerin her birinin vektörüyle anlamsal arama yapıp en yakın makaleleri bulur.
+Bu makaleler yazıma sadece başlık, yıl ve özetin ilk iki cümlesiyle girer (kaynak başına yaklaşık 80 token,
+hesap); ek yazım isteği ve kart üretimi yoktur. Giriş, arka plan, karşılaştırma, açık problemler gibi bölümlerde
+"yalnızca özetinde yazanlar için" atıflanabilirler. Kaynakça iki gruptur: incelenen çalışmalar ve bağlam
+çalışmaları. En fazla 10 bağlam kaynağı.
+
+```
+python -m scripts.generate_paper --ids 1701.06538 2101.03961 --auto-context 7 --type survey
+python -m scripts.generate_paper --ids 1701.06538 2101.03961 --context 2006.16668 --type survey
+```
+
+**Yerel veri:** Yerelde vektör ve model yoktur. `notebooks/08_local_bundle.py` (Kaggle, CPU; girdiler 01, 04, 06)
+30 binlik örneğin vektörlerini tam vektör dosyasından seçer, modellerle birlikte `local_bundle.zip` yapar.
+Paket satır numarası değil makale kimliği taşır; yerelde içe aktarılırken kimlikler yerel veritabanının satır
+numaralarına eşlenir:
+
+```
+python -m scripts.import_bundle local_bundle.zip
+```
+
+Sonuç: `data/vectors_dev/`, `data/models/` ve yerel veritabanında `term_df`.
+
 ## Ölçümler
 
 Değerlendirme seti: 730 sorgu (300 başlık, 150+150 sentetik İngilizce/Türkçe, 30 elle yazılmış Türkçe,

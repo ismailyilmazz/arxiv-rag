@@ -6,6 +6,7 @@ from core import cards, citations, config, fulltext, writer
 from core.arxiv_ids import normalize_id
 
 MAX_SOURCES = 5
+MAX_CONTEXT = 10
 
 
 def paper_info(conn: sqlite3.Connection, paper_ids: list[str],
@@ -25,7 +26,7 @@ def paper_info(conn: sqlite3.Connection, paper_ids: list[str],
 def generate(conn: sqlite3.Connection, cache: sqlite3.Connection, paper_ids: list[str], doc_type: str = "survey",
              lang: str = "en", card_model: Optional[str] = None, write_model: Optional[str] = None,
              policy: Optional[str] = None, fetcher: Optional[Callable] = None,
-             metadata_fetcher: Optional[Callable] = None) -> dict:
+             metadata_fetcher: Optional[Callable] = None, context_ids: tuple = ()) -> dict:
     fetcher = fetcher or fulltext.fetch
     if doc_type not in writer.DOC_TYPES:
         raise ValueError(f"Bilinmeyen tür: {doc_type}. Seçenekler: {', '.join(writer.DOC_TYPES)}")
@@ -34,6 +35,9 @@ def generate(conn: sqlite3.Connection, cache: sqlite3.Connection, paper_ids: lis
     ids = list(dict.fromkeys(normalize_id(p) for p in paper_ids))
     if not 1 <= len(ids) <= MAX_SOURCES:
         raise ValueError(f"1 ile {MAX_SOURCES} arasında makale seçilmeli.")
+    context_ids = [c for c in dict.fromkeys(normalize_id(c) for c in context_ids) if c not in ids]
+    if len(context_ids) > MAX_CONTEXT:
+        raise ValueError(f"En fazla {MAX_CONTEXT} bağlam kaynağı eklenebilir.")
 
     card_model = card_model or config.LLM_CARD_MODEL
     write_model = write_model or config.LLM_WRITE_MODEL
@@ -41,7 +45,7 @@ def generate(conn: sqlite3.Connection, cache: sqlite3.Connection, paper_ids: lis
     cards.init_cache(cache)
 
     start = time.perf_counter()
-    info = paper_info(conn, ids, metadata_fetcher)
+    info = paper_info(conn, ids + context_ids, metadata_fetcher)
     missing = [p for p in ids if p not in info]
     if missing:
         raise ValueError(f"Makale bilgisi bulunamadı: {', '.join(missing)}")
@@ -56,10 +60,13 @@ def generate(conn: sqlite3.Connection, cache: sqlite3.Connection, paper_ids: lis
                         "text_source": meta["source"], "cached": meta["cached"]})
     t_cards = time.perf_counter()
 
-    draft, write_tokens, sections = writer.write_document(sources, doc_type, lang, write_model)
+    context = [{"n": len(sources) + i, "id": cid, **info[cid]}
+               for i, cid in enumerate([c for c in context_ids if c in info], start=1)]
+    draft, write_tokens, sections = writer.write_document(sources, doc_type, lang, write_model, context)
     t_write = time.perf_counter()
-    body, report = citations.check_and_fix(draft, len(sources), tuple(writer.uncited_allowed(doc_type, lang)))
-    markdown = body.rstrip() + "\n\n" + citations.bibliography(sources, lang)
+    body, report = citations.check_and_fix(draft, len(sources) + len(context),
+                                           tuple(writer.uncited_allowed(doc_type, lang)))
+    markdown = body.rstrip() + "\n\n" + citations.bibliography(sources, lang, context)
 
     return {
         "markdown": markdown,
@@ -68,6 +75,7 @@ def generate(conn: sqlite3.Connection, cache: sqlite3.Connection, paper_ids: lis
         "models": {"card": card_model, "write": write_model},
         "sources": [{"n": s["n"], "id": s["id"], "title": s["title"], "text_source": s["text_source"],
                      "cached": s["cached"]} for s in sources],
+        "context": [{"n": c["n"], "id": c["id"], "title": c["title"]} for c in context],
         "citations": report,
         "length": {"words": len(body.split()), "truncated": any(r["truncated"] for r in sections)},
         "sections": sections,
