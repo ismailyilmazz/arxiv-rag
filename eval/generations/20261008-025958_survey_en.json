@@ -1,0 +1,125 @@
+{
+  "doc_type": "survey",
+  "lang": "en",
+  "models": {
+    "card": "openai/gpt-oss-20b",
+    "write": "openai/gpt-oss-120b"
+  },
+  "sources": [
+    {
+      "n": 1,
+      "id": "1701.06538",
+      "title": "Outrageously Large Neural Networks: The Sparsely-Gated Mixture-of-Experts Layer",
+      "text_source": "html",
+      "cached": true
+    },
+    {
+      "n": 2,
+      "id": "2101.03961",
+      "title": "Switch Transformers: Scaling to Trillion Parameter Models with Simple and Efficient Sparsity",
+      "text_source": "html",
+      "cached": true
+    },
+    {
+      "n": 3,
+      "id": "2401.04088",
+      "title": "Mixtral of Experts",
+      "text_source": "html",
+      "cached": true
+    }
+  ],
+  "context": [
+    {
+      "n": 4,
+      "id": "2006.16668",
+      "title": "GShard: Scaling Giant Models with Conditional Computation and Automatic Sharding"
+    },
+    {
+      "n": 5,
+      "id": "2112.06905",
+      "title": "GLaM: Efficient Scaling of Language Models with Mixture-of-Experts"
+    },
+    {
+      "n": 6,
+      "id": "2201.05596",
+      "title": "DeepSpeed-MoE: Advancing Mixture-of-Experts Inference and Training to Power Next-Generation AI Scale"
+    },
+    {
+      "n": 7,
+      "id": "2202.08906",
+      "title": "ST-MoE: Designing Stable and Transferable Sparse Expert Models"
+    }
+  ],
+  "citations": {
+    "citations_found": 79,
+    "invalid_numbers": [],
+    "uncited_sources": [],
+    "paragraphs": 38,
+    "uncited_paragraphs": 2,
+    "removed_model_references": false
+  },
+  "length": {
+    "words": 4048,
+    "truncated": false
+  },
+  "sections": [
+    {
+      "section": "intro",
+      "source": null,
+      "tokens": 1896,
+      "truncated": false
+    },
+    {
+      "section": "background",
+      "source": null,
+      "tokens": 2111,
+      "truncated": false
+    },
+    {
+      "section": "approaches",
+      "source": 1,
+      "tokens": 2918,
+      "truncated": false
+    },
+    {
+      "section": "approaches",
+      "source": 2,
+      "tokens": 4265,
+      "truncated": false
+    },
+    {
+      "section": "approaches",
+      "source": 3,
+      "tokens": 3135,
+      "truncated": false
+    },
+    {
+      "section": "comparison",
+      "source": null,
+      "tokens": 3791,
+      "truncated": false
+    },
+    {
+      "section": "open",
+      "source": null,
+      "tokens": 2469,
+      "truncated": false
+    },
+    {
+      "section": "conclusion",
+      "source": null,
+      "tokens": 1797,
+      "truncated": false
+    }
+  ],
+  "tokens": {
+    "cards": 0,
+    "write": 23170,
+    "total": 23170
+  },
+  "timings_ms": {
+    "cards": 597,
+    "write": 313991,
+    "total": 314590
+  }
+}
