@@ -209,7 +209,10 @@ def uncited_allowed(doc_type: str, lang: str) -> list[str]:
 
 BROAD_RULES = ("\n- Never mention summaries, cards, material, context sources or how this text was produced."
                "\n- A sentence that names a work must carry that work's own number. Do not claim that a work does "
-               "not address something unless the material says so.")
+               "not address something unless the material says so."
+               "\n- The language you write in does not define the research focus. Do not add a language, region or "
+               "domain focus that the topic does not state."
+               "\n- Derive gaps and limitations only from what the material states.")
 
 
 def fixed(key, en, tr, kind, task, tokens, cited=True, last=False):
@@ -245,8 +248,8 @@ BROAD = {
     "proposal": {
         "label": "research proposal", "theme_prefix": {"en": "Related Work: ", "tr": "İlgili Çalışmalar: "},
         "theme_task": "Review the works of this theme as related work for the proposal: what they achieve, how they "
-                      "differ and which limitation or gap they leave open that matters for this topic. Mention "
-                      "every listed work at least once with its own citation.",
+                      "differ and which limitation or gap the material states for them. Mention every listed work "
+                      "at least once with its own citation.",
         "sections": [
             fixed("abstract", "Abstract", "Özet", "written",
                   "Write the abstract of the proposal: the problem, the gap, the proposed approach, the evaluation "

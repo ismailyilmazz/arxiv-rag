@@ -1,8 +1,9 @@
 import re
 
 import numpy as np
+import pytest
 
-from core import citations, coverage, fulltext, llm, survey
+from core import citations, coverage, fulltext, llm, scholar, survey
 from core.db import connect, init_db, upsert_papers
 from core.search_dense import DenseIndex
 from tests.conftest import make_row
@@ -12,6 +13,15 @@ B = [f"2102.0000{i}" for i in range(1, 7)]
 TITLES = {A[0]: "GShard: Scaling Giant Models", A[1]: "GLaM: Efficient Scaling of Language Models",
           **{pid: f"Sparse expert routing study {i}" for i, pid in enumerate(A[2:], start=3)},
           **{pid: f"Dense retrieval for question answering {i}" for i, pid in enumerate(B, start=1)}}
+
+
+REAL_BATCH, REAL_REFERENCES = scholar.batch, scholar.references
+
+
+@pytest.fixture(autouse=True)
+def no_network(monkeypatch):
+    monkeypatch.setattr(scholar, "references", lambda pid, limit=200: [])
+    monkeypatch.setattr(scholar, "batch", lambda ids: {})
 
 
 class FakePipeline:
@@ -69,7 +79,8 @@ def test_build_survey_end_to_end(tmp_path, monkeypatch):
                               fetcher=lambda pid: fulltext.FullText(pid, "html", []))
     assert out["rejected_queries"] == ["pizza place near me"]
     assert B[5] not in out["candidate_ids"] and A[0] in out["screened_ids"]
-    assert 3 <= len(out["themes"]) <= 6 and A[0] in out["deep"] and len(out["deep"]) <= 3
+    assert 1 <= len(out["themes"]) <= 6 and A[0] in out["deep"] and len(out["deep"]) <= 3
+    assert all(t["size"] >= 3 for t in out["themes"]) and out["scholar"]["ok"]
     md = out["markdown"]
     refs = md.split("## References")[1].split("## Further reading")[0]
     numbers = [int(n) for n in re.findall(r"^\[(\d+)\]", refs, re.M)]
@@ -172,3 +183,74 @@ def test_unknown_broad_type_is_rejected(tmp_path):
     conn = connect(tmp_path / "p.db")
     with pytest.raises(ValueError, match="Bilinmeyen tür"):
         survey.build_broad(conn, connect(tmp_path / "c.db"), None, "x", "poem")
+
+
+def test_scholar_parses_batch_and_references(monkeypatch):
+    def fake(url, payload=None, retries=5):
+        if "batch" in url:
+            assert payload == {"ids": ["ARXIV:2101.03961", "ARXIV:9999.99999"]}
+            return [{"citationCount": 5000, "year": 2021}, None]
+        return {"data": [{"citedPaper": {"externalIds": {"ArXiv": "1701.06538"}, "citationCount": 3000, "year": 2017}},
+                         {"citedPaper": {"externalIds": {"DOI": "x"}, "citationCount": 9}}]}
+
+    monkeypatch.setattr(scholar, "_request", fake)
+    monkeypatch.setattr(scholar, "batch", REAL_BATCH)
+    monkeypatch.setattr(scholar, "references", REAL_REFERENCES)
+    assert scholar.batch(["2101.03961", "9999.99999"]) == {"2101.03961": {"citations": 5000, "year": 2021}}
+    assert scholar.references("2101.03961") == [{"id": "1701.06538", "citations": 3000, "year": 2017}]
+
+
+def test_citation_prior_reranks_and_references_expand(tmp_path, monkeypatch):
+    _fake_llm(monkeypatch)
+    conn, pipeline = _world(tmp_path)
+    monkeypatch.setattr(scholar, "references", lambda pid, limit=200: [
+        {"id": B[4], "citations": 900, "year": 2020}, {"id": "0000.00000", "citations": 5, "year": 2020}])
+    monkeypatch.setattr(scholar, "batch", lambda ids: {pid: {"citations": 4000 if pid == B[3] else 1, "year": 2024}
+                                                        for pid in ids})
+    pipeline.search = lambda text, k=10: {"results": [{"id": pid, "score": 1.0} for pid in A[:4]], "accepted": True}
+    out = survey.build_broad(conn, connect(tmp_path / "c.db"), pipeline, "experts", seed_ids=[A[0]], n_sources=4,
+                             fetcher=lambda pid: fulltext.FullText(pid, "html", []))
+    assert out["scholar"]["reference_additions"] == 1 and B[4] in out["candidate_ids"]
+    assert "0000.00000" not in out["candidate_ids"]
+    scores = survey.rerank({"x": 1.0, "y": 0.5}, survey.citation_scores(
+        {"x": {"citations": 1, "year": 2025}, "y": {"citations": 5000, "year": 2025}}, 2026))
+    assert scores["y"] > scores["x"]
+
+
+def test_scholar_failure_does_not_stop_generation(tmp_path, monkeypatch):
+    _fake_llm(monkeypatch)
+    conn, pipeline = _world(tmp_path)
+
+    def down(pid, limit=200):
+        raise OSError("network unreachable")
+
+    monkeypatch.setattr(scholar, "references", down)
+    out = survey.build_broad(conn, connect(tmp_path / "c.db"), pipeline, "experts", n_sources=8,
+                             fetcher=lambda pid: fulltext.FullText(pid, "html", []))
+    assert out["scholar"]["ok"] is False and "network unreachable" in out["scholar"]["error"]
+    assert out["markdown"].startswith("# Review Title")
+
+
+def test_survey_cap_moves_extra_surveys_to_further_reading():
+    titles = {"a": "A Survey of X", "b": "Method B", "c": "X: A Review", "d": "An Overview of X", "e": "Method E"}
+    scores = {"a": 0.9, "b": 0.8, "c": 0.7, "d": 0.6, "e": 0.5}
+    screened, moved = survey.screen(scores, [], 4, titles, max_surveys=2)
+    assert screened == ["a", "b", "c", "e"] and moved == ["d"]
+    assert survey.is_survey("Retrieval-Augmented Generation: A Survey") and not survey.is_survey("Switch Transformers")
+
+
+def test_small_clusters_merge_into_nearest():
+    vectors = np.array([[1, 0], [0.9, 0.1], [0.95, 0.05], [0, 1], [0.1, 0.9], [0.05, 0.95], [0.8, 0.2]],
+                       dtype=np.float32)
+    labels = survey.merge_small(np.array([0, 0, 0, 1, 1, 1, 2]), vectors)
+    assert labels.tolist() == [0, 0, 0, 1, 1, 1, 0]
+
+
+def test_number_audit_flags_numbers_missing_from_source():
+    materials = {1: "GLaM has 1.2 trillion parameters, about 7x larger than GPT-3, and uses half the flops.",
+                 2: "Training on 1,440 GPUs reached 1.41M tokens per second."}
+    text = ("GLaM uses 1.2 trillion parameters [1]. It needs 14 percent of the compute [1]. "
+            "MegaScale trains on 1,440 GPUs at 1.41 M tokens per second [2]. Both scale well [1, 2]. "
+            "GPT-3 sized models matter [1].")
+    report = citations.number_audit(text, materials)
+    assert report["checked"] == 4 and report["unsupported"] == 1 and "[1] 14" in report["examples"][0]

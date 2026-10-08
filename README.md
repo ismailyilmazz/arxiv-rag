@@ -244,6 +244,27 @@ python -m scripts.generate_broad --topic "Mixture of experts for large language 
     --seeds 1701.06538 2101.03961 2401.04088 --gold-survey 2407.06204
 ```
 
+## Adım 5c: Kaynak kalitesi
+
+İlk geniş çalıştırmada (Kaggle, tam korpus) hakem survey'lerin korpustaki kaynaklarının sadece yaklaşık %5'i aday
+listesine girdi; arama, konuyu metinsel olarak en iyi anlatan yeni makaleleri buluyor, alanın en etkili
+çalışmalarını değil. Ayrıca survey'ler malzemeyi işgal etti, yazım dili araştırma odağı sanıldı ve küçük temalar
+oluştu (insan ve ölçüm değerlendirmesi). Düzeltmeler:
+
+- **Atıf farkındalıklı seçim (Semantic Scholar):** tohumların (yoksa ilk 3 adayın) kaynakçasındaki, korpusta olan
+  arXiv çalışmaları adaylara eklenir; adaylar `0.6 × arama skoru + 0.4 × yıllık atıf skoru` ile yeniden sıralanır
+  (yıllık atıf, yeni makalelerin ezilmemesi için). Servise ulaşılamazsa üretim atıf sinyali olmadan sürer ve
+  raporda belirtilir. `S2_API_KEY` isteğe bağlıdır.
+- **Survey sınırı:** en fazla 2 survey malzemeye girer, derin okunmaz; fazlası "İleri okuma" listesine gider.
+- **Küçük temalar:** 3 makaleden küçük kümeler anlamca en yakın kümeye katılır.
+- **Prompt:** yazım dili araştırma odağını belirlemez; açıklar sadece malzemenin söylediğinden türetilir;
+  istenirse `--focus` ile odak verilir.
+- **Sayı denetimi:** tek bir kaynağa atıflanan cümlelerdeki sayıların o kaynağın malzemesinde geçip geçmediği
+  ölçülür (uydurma göstergesi; yazıyla yazılmış oranları yakalamaz).
+
+Kapsama ölçümü notu: hakem seti sadece arXiv linki olan kaynaklardan çıkarılır, bu yüzden mutlak oranlar düşük
+görünür; anlamlı olan aynı hakemle önce/sonra karşılaştırmasıdır.
+
 ## Ölçümler
 
 Değerlendirme seti: 730 sorgu (300 başlık, 150+150 sentetik İngilizce/Türkçe, 30 elle yazılmış Türkçe,

@@ -150,3 +150,40 @@ def further_reading(sources: list[dict], lang: str) -> str:
         year = (s.get("published") or "")[:4] or "n.d."
         lines.append(f"- {s['title']} ({year}). https://arxiv.org/abs/{s['id']}")
     return "\n".join(lines) + "\n"
+
+
+_NUM_LOOSE = re.compile(r"\d+(?:[.,]\d+)*")
+_NUM_STRICT = re.compile(r"(?<![A-Za-z_\-\d.,])\d+(?:[.,]\d+)*")
+
+
+def _norm_number(raw: str):
+    if re.fullmatch(r"\d{1,3}(,\d{3})+", raw):
+        raw = raw.replace(",", "")
+    raw = raw.replace(",", ".")
+    if re.fullmatch(r"(19|20)\d\d", raw):
+        return None
+    return raw.rstrip("0").rstrip(".") if "." in raw else raw
+
+
+def _numbers(text: str, pattern) -> set[str]:
+    return {v for v in (_norm_number(m) for m in pattern.findall(text)) if v}
+
+
+def number_audit(markdown: str, materials: dict[int, str]) -> dict:
+    checked, missing, examples = 0, 0, []
+    for sentence in re.split(r"(?<=[.!?])\s+", markdown):
+        if sentence.lstrip().startswith(("|", "#")):
+            continue
+        cited = {n for g in _CITE.findall(sentence) for n in numbers_in(g)}
+        if len(cited) != 1 or next(iter(cited)) not in materials:
+            continue
+        n = next(iter(cited))
+        plain = _CITE.sub(" ", sentence)
+        have = _numbers(materials[n], _NUM_LOOSE)
+        for value in _numbers(plain, _NUM_STRICT):
+            checked += 1
+            if value not in have:
+                missing += 1
+                if len(examples) < 5:
+                    examples.append(f"[{n}] {value}: {' '.join(plain.split())[:160]}")
+    return {"checked": checked, "unsupported": missing, "examples": examples}

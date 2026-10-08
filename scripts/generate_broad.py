@@ -14,6 +14,8 @@ def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--topic", required=True)
     p.add_argument("--type", choices=sorted(writer.BROAD), default="survey")
+    p.add_argument("--focus", default=None)
+    p.add_argument("--no-scholar", action="store_true")
     p.add_argument("--seeds", nargs="*", default=[])
     p.add_argument("--lang", choices=["en", "tr"], default="en")
     p.add_argument("--n-sources", type=int, default=30)
@@ -31,7 +33,8 @@ def main() -> None:
     pipeline = SearchPipeline.load(conn, args.vectors_dir, args.models_dir)
     exclude = list(args.exclude) + ([args.gold_survey] if args.gold_survey else [])
     result = build_broad(conn, connect(args.cache_db), pipeline, args.topic, args.type, args.seeds, lang=args.lang,
-                          n_sources=args.n_sources, max_deep=args.max_deep, exclude=tuple(exclude))
+                          n_sources=args.n_sources, max_deep=args.max_deep, exclude=tuple(exclude),
+                          focus=args.focus, use_scholar=not args.no_scholar)
     if args.gold_survey:
         gold = coverage.in_corpus(conn, coverage.fetch_gold(args.gold_survey))
         title = conn.execute("SELECT title FROM papers WHERE id = ?", (args.gold_survey,)).fetchone()
@@ -48,13 +51,20 @@ def main() -> None:
     print(f"Konu: {args.topic} | tür: {args.type} | dil: {args.lang}")
     print(f"Sorgular: {result['queries']}" + (f"  (bekçinin reddettiği: {result['rejected_queries']})"
                                                if result["rejected_queries"] else ""))
+    s2 = result["scholar"]
+    print(f"Semantic Scholar: {'tamam' if s2['ok'] else 'kullanılamadı ' + s2.get('error', '')}, "
+          f"atıf bilgisi olan aday: {s2['with_citations']}, kaynakçadan eklenen aday: {s2['reference_additions']}")
     print(f"Aday: {result['candidates']}, elenen sonrası: {result['screened']}, atıflanan: {len(result['cited'])}, "
-          f"ileri okuma: {len(result['further_reading'])}")
+          f"ileri okuma: {len(result['further_reading'])} (ileri okumaya taşınan survey: {len(result['surveys_moved'])})")
     for t in result["themes"]:
         print(f"  Tema: {t['name']}  ({t['size']} makale, derin: {', '.join(t['deep']) or '-'})")
     c = result["citations"]
     print(f"Atıf: geçersiz {c['invalid_numbers'] or 'yok'}, atıfsız paragraf {c['uncited_paragraphs']}/{c['paragraphs']}, "
           f"isim-atıf uyuşmazlığı {c['name_mismatches']['count']}, iç dil {c['meta_language']['count']}")
+    audit = c["number_audit"]
+    print(f"Sayı denetimi: {audit['checked']} sayının {audit['unsupported']} tanesi kaynağın malzemesinde yok")
+    for example in audit["examples"][:3]:
+        print(f"    {example}")
     if "coverage" in result:
         cov = result["coverage"]
         print(f"Kapsama ({cov['gold_survey']}: {cov['gold_title']}): korpustaki hakem kaynağı {cov['gold_in_corpus']}, "

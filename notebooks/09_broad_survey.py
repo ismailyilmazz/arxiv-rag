@@ -21,6 +21,11 @@ from kaggle_secrets import UserSecretsClient
 secrets = UserSecretsClient()
 os.environ["LLM_API_KEY"] = secrets.get_secret("LLM_API_KEY")
 os.environ["ARXIV_CONTACT_EMAIL"] = secrets.get_secret("ARXIV_CONTACT_EMAIL")
+try:
+    os.environ["S2_API_KEY"] = secrets.get_secret("S2_API_KEY")
+    print("Semantic Scholar: anahtarla")
+except Exception:
+    print("Semantic Scholar: anahtarsız")
 
 !git clone {REPO_URL} /kaggle/working/arxiv-rag
 %cd /kaggle/working/arxiv-rag
@@ -52,4 +57,7 @@ for run in RUNS:
 # %%
 for run in RUNS:
     seeds, topic, gold, kind, lang = " ".join(run["seeds"]), run["topic"], run["gold"], run["type"], run["lang"]
-    !python -m scripts.generate_broad --topic "{topic}" --type {kind} --lang {lang} --seeds {seeds} --gold-survey {gold} --db {DB} --vectors-dir {VEC} --models-dir {MODELS} --cache-db /kaggle/working/cache.db --out-dir /kaggle/working/arxiv-rag/eval/generations
+    !python -m scripts.generate_broad --topic "{topic}" --type {kind} --lang {lang} --seeds {seeds} --gold-survey {gold} --db {DB} --vectors-dir {VEC} --models-dir {MODELS} --cache-db /kaggle/working/cache.db --out-dir /kaggle/working/generations
+
+shutil.make_archive("/kaggle/working/generations", "zip", "/kaggle/working/generations")
+print("İndir: Output -> generations.zip", sorted(os.listdir("/kaggle/working/generations")))
