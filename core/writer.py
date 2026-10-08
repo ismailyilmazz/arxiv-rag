@@ -94,7 +94,7 @@ Rules:
 - Every paragraph that relies on the sources cites them in square brackets, such as [1] or [1, 3], using only the numbers 1 to {n}. When you mention a source by name, put its number next to it.
 - Do not invent results, numbers, data sets or methods that are not in the material.
 - Do not repeat what is already written. Do not write the section heading, any other section or a reference list.
-- Length: as long as the material supports for this part, and no longer. Never pad.
+- Length: as long as the material supports for this part, and no longer. Never pad.{extra}
 """
 
 TITLE_PROMPT = """Write a concise, specific title in {language} for a {label} with this content:
@@ -184,7 +184,7 @@ def write_document(sources: list[dict], doc_type: str, lang: str, model: str,
                 label=spec["label"], language=language, outline=outline, written=summary_of(written),
                 target=target, task=sec["task"], context_rule=rule,
                 material=material_for(sec, sources, written, source, context if with_context else ()),
-                style=STYLE, n=n_total)
+                style=STYLE, n=n_total, extra="")
             text, tokens, truncated = _call(prompt, model, sec["max_tokens"])
             total += tokens
             report.append({"section": sec["key"], "source": source["n"] if source else None,
@@ -205,3 +205,150 @@ def write_document(sources: list[dict], doc_type: str, lang: str, model: str,
 
 def uncited_allowed(doc_type: str, lang: str) -> list[str]:
     return [sec["title"][lang] for sec in DOC_TYPES[doc_type]["sections"] if not sec["cited"]]
+
+
+BROAD_RULES = ("\n- Never mention summaries, cards, material, context sources or how this text was produced."
+               "\n- A sentence that names a work must carry that work's own number. Do not claim that a work does "
+               "not address something unless the material says so.")
+
+
+def fixed(key, en, tr, kind, task, tokens, cited=True, last=False):
+    return {"key": key, "title": {"en": en, "tr": tr}, "kind": kind, "task": task, "tokens": tokens,
+            "cited": cited, "last": last}
+
+
+THEMES = "THEMES"
+BROAD = {
+    "survey": {
+        "label": "literature review", "theme_prefix": {"en": "", "tr": ""},
+        "theme_task": "Write this thematic section as a connected narrative: the problem the works share, how their "
+                      "approaches differ and the results they report. Give the works with detailed material more "
+                      "depth, and mention every listed work at least once with its own citation.",
+        "sections": [
+            fixed("intro", "Introduction", "Giriş", "overview",
+                  "Motivate the topic, state the scope (this review covers {n} works organized into {k} themes and "
+                  "does not cover the whole field) and outline the themes in their order.", 1500),
+            fixed("background", "Background", "Arka Plan", "brief",
+                  "Explain the concepts and terminology a reader needs before the themes, citing the works they "
+                  "come from.", 1500),
+            THEMES,
+            fixed("comparison", "Comparison and Discussion", "Karşılaştırma ve Tartışma", "setup",
+                  "Compare the representative works across the themes. Include one markdown table with the columns "
+                  "Work, Year, Key idea, Setting or scale and Main result, where every row cites its work. Then "
+                  "discuss the trade-offs.", 2500),
+            fixed("open", "Open Problems", "Açık Problemler", "limits",
+                  "Derive open problems and research directions from the limitations and gaps of the works. Tie "
+                  "every problem to the works that motivate it, with [n].", 1500),
+            fixed("conclusion", "Conclusion", "Sonuç", "written",
+                  "Summarize the main insights of this review without introducing new claims.", 900, cited=False),
+        ]},
+    "proposal": {
+        "label": "research proposal", "theme_prefix": {"en": "Related Work: ", "tr": "İlgili Çalışmalar: "},
+        "theme_task": "Review the works of this theme as related work for the proposal: what they achieve, how they "
+                      "differ and which limitation or gap they leave open that matters for this topic. Mention "
+                      "every listed work at least once with its own citation.",
+        "sections": [
+            fixed("abstract", "Abstract", "Özet", "written",
+                  "Write the abstract of the proposal: the problem, the gap, the proposed approach, the evaluation "
+                  "and the expected contributions, in one or two paragraphs.", 800, cited=False, last=True),
+            fixed("problem", "Problem and Motivation", "Problem ve Motivasyon", "overview",
+                  "State the problem and why it matters. Use the themes and works to show what is already solved "
+                  "and what remains open, citing the works behind every statement. Mention that the proposal builds "
+                  "on {n} works organized into {k} themes.", 1500),
+            THEMES,
+            fixed("questions", "Research Questions", "Araştırma Soruları", "limits",
+                  "Formulate three to five research questions that follow from the gaps identified in the related "
+                  "work. Explain each one and cite the works whose limitations motivate it.", 1200),
+            fixed("method", "Proposed Method", "Önerilen Yöntem", "full",
+                  "Describe the proposed new method as a plan: its components, data, training and how it answers "
+                  "each research question. Cite works whose components you build on. Never present results.", 2500,
+                  cited=False),
+            fixed("evaluation", "Evaluation Plan", "Değerlendirme Planı", "setup",
+                  "Describe the evaluation plan: data sets, baselines taken from the cited works, metrics and "
+                  "ablations.", 1800, cited=False),
+            fixed("contributions", "Expected Contributions", "Beklenen Katkılar", "written",
+                  "State the expected contributions of the proposed work.", 1000, cited=False),
+            fixed("risks", "Risks and Limitations", "Riskler ve Sınırlar", "limits",
+                  "Discuss the risks and limitations of the plan and how they will be mitigated.", 1200,
+                  cited=False),
+        ]},
+    "synthesis": {
+        "label": "synthesis report", "theme_prefix": {"en": "Findings: ", "tr": "Bulgular: "},
+        "theme_task": "Synthesize the findings of the works in this theme: what they show together, with their "
+                      "numbers and conditions, where results agree or conflict, and the evidence behind them. "
+                      "Mention every listed work at least once with its own citation.",
+        "sections": [
+            fixed("summary", "Summary", "Özet", "written",
+                  "Summarize what this body of work shows when taken together, in one or two paragraphs.", 800,
+                  cited=False, last=True),
+            THEMES,
+            fixed("agreements", "Agreements and Differences", "Ortak Noktalar ve Farklar", "setup",
+                  "Compare the findings across the themes point by point: where they agree, where they conflict and "
+                  "why. Include one markdown table with the columns Work, Year, Setting and Main finding, where "
+                  "every row cites its work.", 2500),
+            fixed("implications", "Implications", "Çıkarımlar", "limits",
+                  "Discuss the implications for research and practice. Tie every implication to the findings it "
+                  "builds on, with [n].", 1500),
+            fixed("conclusion", "Conclusion", "Sonuç", "written",
+                  "Conclude the report without introducing new claims.", 800, cited=False),
+        ]},
+}
+
+
+def broad_uncited_allowed(doc_type: str, lang: str) -> list[str]:
+    return [sec["title"][lang] for sec in BROAD[doc_type]["sections"] if sec != THEMES and not sec["cited"]]
+
+
+def work_line(s: dict) -> str:
+    return card_text(s) if s.get("card") else f"[{s['n']}] {s['title']} ({_year(s)}): {s.get('key_sentences', '')}"
+
+
+def broad_material(kind: str, sources: list[dict], themes: list[dict], written: list, theme=None) -> str:
+    deep = [s for s in sources if s.get("card")]
+    so_far = "\n\nWritten so far:\n" + summary_of(written)
+    if kind == "theme":
+        return "\n\n".join(work_line(s) for s in sources if s["id"] in theme["ids"])
+    if kind == "overview":
+        lines = [f"Themes ({len(themes)}):"] + [f"- {t['name']}: {t['description']}" for t in themes]
+        return "\n".join(lines) + "\n\n" + "\n\n".join(card_text(s, ("problem", "method")) for s in deep)
+    if kind == "brief":
+        return "\n\n".join(card_text(s, ("problem", "method")) for s in deep)
+    if kind == "full":
+        return "\n\n".join(card_text(s) for s in deep) + so_far
+    if kind == "setup":
+        return "\n\n".join(card_text(s, ("method", "setup", "findings")) for s in deep) + so_far
+    if kind == "limits":
+        return "\n\n".join(card_text(s, ("findings", "limitations")) for s in deep) + so_far
+    return so_far.strip()
+
+
+def write_broad(doc_type: str, sources: list[dict], themes: list[dict], topic: str, lang: str,
+                model: str) -> tuple[str, int, list[dict]]:
+    spec, language, n = BROAD[doc_type], LANGUAGES[lang], len(sources)
+    label = f"{spec['label']} on {topic}"
+    plan = []
+    for sec in spec["sections"]:
+        if sec == THEMES:
+            plan += [{"key": f"theme:{t['name']}", "heading": spec["theme_prefix"][lang] + t["name"], "kind": "theme",
+                      "task": spec["theme_task"], "tokens": 2500, "last": False, "theme": t} for t in themes]
+        else:
+            plan.append({**sec, "heading": sec["title"][lang], "theme": None})
+    outline = "\n".join(f"## {p['heading']}" for p in plan)
+    texts, written, report, used = {}, [], [], 0
+    for item in [p for p in plan if not p["last"]] + [p for p in plan if p["last"]]:
+        prompt = SECTION_PROMPT.format(
+            label=label, language=language, outline=outline, written=summary_of(written),
+            target=f'the section "{item["heading"]}"', task=item["task"].format(n=n, k=len(themes)),
+            context_rule="", material=broad_material(item["kind"], sources, themes, written, item["theme"]),
+            style=STYLE, n=n, extra=BROAD_RULES)
+        text, tokens, truncated = _call(prompt, model, item["tokens"])
+        used += tokens
+        report.append({"section": item["key"], "source": None, "tokens": tokens, "truncated": truncated})
+        texts[item["heading"]] = text.strip()
+        written.append((item["heading"], texts[item["heading"]]))
+    title, tokens, _ = _call(TITLE_PROMPT.format(language=language, label=label, written=summary_of(written)),
+                             model, 300)
+    used += tokens
+    title = title.strip().strip('"').strip("#").strip() or topic
+    body = "\n\n".join(f"## {p['heading']}\n\n{texts[p['heading']]}" for p in plan)
+    return f"# {title}\n\n{body}\n", used, report

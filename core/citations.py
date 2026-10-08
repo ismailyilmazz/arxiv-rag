@@ -88,3 +88,65 @@ def bibliography(sources: list[dict], lang: str, context: list[dict] = ()) -> st
         for c in context:
             lines += [_entry(c), ""]
     return "\n".join(lines).rstrip() + "\n"
+
+
+_META = re.compile(r"\b(summary|summaries|reading card|the card|the material|context source|contextual source|"
+                   r"özet(?:i|inde)? kart|bağlam kayna\w*)\b", re.IGNORECASE)
+
+
+def renumber(markdown: str) -> tuple[str, dict[int, int]]:
+    mapping: dict[int, int] = {}
+
+    def sub(match):
+        nums = numbers_in(match.group(1))
+        for n in nums:
+            mapping.setdefault(n, len(mapping) + 1)
+        return "[" + ", ".join(str(m) for m in sorted(dict.fromkeys(mapping[n] for n in nums))) + "]"
+
+    return _CITE.sub(sub, markdown), mapping
+
+
+def aliases(title: str) -> set[str]:
+    out = set()
+    head = re.split(r"[:\u2014\u2013]", title)[0].strip()
+    if 1 <= len(head.split()) <= 3:
+        out.add(head)
+    for token in re.findall(r"[A-Za-z][\w-]*", title):
+        if len(token) >= 3 and (token.isupper() or re.search(r"[a-z][A-Z]", token)):
+            out.add(token)
+    return out
+
+
+def name_mismatches(markdown: str, sources: list[dict]) -> dict:
+    names = {s["n"]: aliases(s["title"]) for s in sources}
+    counts: dict[str, int] = {}
+    for alias_set in names.values():
+        for a in alias_set:
+            counts[a] = counts.get(a, 0) + 1
+    unique = {n: {a for a in al if counts[a] == 1} for n, al in names.items()}
+    examples, total = [], 0
+    for sentence in re.split(r"(?<=[.!?])\s+", markdown):
+        cited = {m for g in _CITE.findall(sentence) for m in numbers_in(g)}
+        if not cited:
+            continue
+        for n, al in unique.items():
+            if n not in cited and any(re.search(rf"(?<![\w-]){re.escape(a)}(?![\w-])", sentence) for a in al):
+                total += 1
+                if len(examples) < 5:
+                    examples.append(" ".join(sentence.split())[:200])
+    return {"count": total, "examples": examples}
+
+
+def meta_language(markdown: str) -> dict:
+    found = [m.group(0) for m in _META.finditer(markdown)]
+    return {"count": len(found), "examples": found[:5]}
+
+
+def further_reading(sources: list[dict], lang: str) -> str:
+    if not sources:
+        return ""
+    lines = ["## İleri okuma" if lang == "tr" else "## Further reading", ""]
+    for s in sources:
+        year = (s.get("published") or "")[:4] or "n.d."
+        lines.append(f"- {s['title']} ({year}). https://arxiv.org/abs/{s['id']}")
+    return "\n".join(lines) + "\n"

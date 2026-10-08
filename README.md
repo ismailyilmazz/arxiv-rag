@@ -213,6 +213,37 @@ python -m scripts.import_bundle local_bundle.zip
 
 Sonuç: `data/vectors_dev/`, `data/models/` ve yerel veritabanında `term_df`.
 
+## Adım 5b: Geniş akış (üç tür)
+
+Az sayıda derin kaynakla yazılan metin "seçilmiş çalışmaların incelemesi" olarak kalıyordu (insan değerlendirmesi);
+aynı sorun üç türde de vardı. Geniş akış, arama katmanını üretime bağlar ve üç türde de kullanılır. Türler sadece
+temaların kullanımında ayrışır: literatür taramasında her tema bir bölümdür; araştırma önerisinde temalar
+"İlgili Çalışmalar: {tema}" bölümleridir ve araştırma soruları bunların bıraktığı boşluklardan türetilir; sentez
+raporunda temalar "Bulgular: {tema}" bölümleridir ve temalar arası karşılaştırma tablosu eklenir.
+
+1. Sorgu genişletme: konudan 5 alt sorgu (LLM, 1 istek).
+2. Aday toplama: her alt sorgu için arama akışının (anlamsal + BM25 + sıralayıcı + bekçi) ilk 20 sonucu ve tohum
+   makalelere yakın makaleler, RRF ile birleştirilir; bekçinin reddettiği sorgular atlanır.
+3. Eleme: en iyi 30 makale (tohumlar her zaman dahil).
+4. Temalar: makale vektörleri K-Means ile 3-6 kümeye ayrılır (küme sayısı silhouette ile seçilir); LLM kümeleri
+   adlandırır, konu dışı kümeleri atar ve sırayı belirler.
+5. Derinlik: tohumlar ve her temanın merkezine en yakın makale tam metin kartı alır (en fazla 6); diğerleri
+   özetin katkı cümleleriyle girer.
+6. Yazım: giriş, arka plan, her tema için bir bölüm, karşılaştırma tablosu, açık problemler, sonuç.
+7. Doğrulama: geçersiz atıf, atıfsız paragraf, isim-atıf uyuşmazlığı (bir çalışmanın adını anan cümle başka
+   numara veriyorsa) ve sistemin iç dilinin metne sızması ölçülür.
+8. Çıktı: numaralar ilk geçiş sırasına göre yeniden verilir; kaynakçada sadece atıflananlar, elenen ama
+   atıflanmayan ilgili makaleler linkli "İleri okuma" listesinde.
+
+Kapsama ölçümü: arXiv'deki gerçek bir survey hakem olarak kullanılır; kaynakçasındaki arXiv kimliklerinden
+korpusumuzda olanların ne kadarının aday listesine girdiği, elemeden geçtiği ve atıflandığı ölçülür (hakem survey
+aday listesinden çıkarılır). Tam korpusla Kaggle'da çalışır: `notebooks/09_broad_survey.py`.
+
+```
+python -m scripts.generate_broad --topic "Mixture of experts for large language models" --type survey \
+    --seeds 1701.06538 2101.03961 2401.04088 --gold-survey 2407.06204
+```
+
 ## Ölçümler
 
 Değerlendirme seti: 730 sorgu (300 başlık, 150+150 sentetik İngilizce/Türkçe, 30 elle yazılmış Türkçe,
