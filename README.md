@@ -262,6 +262,12 @@ oluştu (insan ve ölçüm değerlendirmesi). Düzeltmeler:
   bu pay fazla geldi ve genel makaleler yine ilk 30'a girdi (ölçüm). Şimdiki eşikler paysızdır: kaynakçadan gelen
   makale ve atıf bonusu için aramada bulunanların alt çeyreği, bütün adaylar için alt %10'u. Atıf ağırlığı 0,3.
   Raporda her kaynağın ilgi skoru tutulur, eşikler veriyle ayarlanabilir.
+- **Kelime yolu:** kuru çalıştırma, paysız eşiklerin genel makaleleri tamamen dışarıda bıraktığını ama eski temel
+  çalışmaları da (GShard; RAG'de REALM, FiD, ORQA) dışarıda bıraktığını gösterdi (ölçüm: RAG'de kaynakçadan gelen 74
+  makalenin hepsi elendi; tohum DPR'nin kendi ilgi skoru 0,883, alt %10 eşiği 0,906). Bu yüzden kaynakçadan gelen bir
+  makale ikinci bir yoldan da kabul edilir: ilgi skoru alt %10 eşiğinin üstündeyse ve başlığında ya da özetinde konunun
+  ayırt edici bir kelimesi geçiyorsa. Ayırt edici kelimeler, konu kelimelerinden korpustaki makalelerin en fazla %5'inde
+  geçenlerdir (`term_df`); "language" ya da "model" gibi yaygın kelimeler sayılmaz.
 - **Yedekleme:** tema adlandırma bir kümeyi konu dışı diye atarsa, sıradaki konu içi adaylar en yakın temaya
   eklenerek kaynak sayısı hedefe tamamlanır (önceki çalıştırmada 30 kaynaktan 8'i kalmış, metin kısalmıştı).
 - **Kesilme:** bir bölüm token sınırında kesilirse model kaldığı yerden bir kez devam eder; plan bölümlerinin

@@ -203,7 +203,8 @@ def test_scholar_parses_batch_and_references(monkeypatch):
 def _exact_world(tmp_path):
     conn = connect(tmp_path / "papers.db")
     init_db(conn)
-    upsert_papers(conn, [make_row(pid, TITLES[pid], f"We propose method {pid} with 5 experts.") for pid in A + B])
+    upsert_papers(conn, [make_row(pid, TITLES[pid], f"We propose method {pid} with 5 experts.") for pid in A] +
+                  [make_row(pid, TITLES[pid], f"We propose passage retrieval method {pid}.") for pid in B])
     pk = dict(conn.execute("SELECT id, pk FROM papers").fetchall())
     vectors = np.array([[1, 0, 0, 0]] * len(A) + [[0, 1, 0, 0]] * len(B), dtype=np.float16)
     return conn, FakePipeline(DenseIndex(vectors, np.array([pk[p] for p in A + B]), {"model": "x"}))
@@ -369,3 +370,33 @@ def test_dry_run_selects_sources_without_writing(tmp_path, monkeypatch):
     papers = [p for t in out["themes"] for p in t["papers"]]
     assert len(papers) == out["screened"] and all(p["title"] for p in papers)
     assert any(p["deep"] for p in papers) and A[0] in out["deep"]
+
+
+def test_topic_terms_keep_only_distinctive_words(tmp_path, monkeypatch):
+    from core import search_bm25
+    conn = connect(tmp_path / "p.db")
+    init_db(conn)
+    upsert_papers(conn, [make_row(f"2101.{i:05d}", f"T{i}", "A") for i in range(1, 101)])
+    freq = {"mixture": 2, "experts": 1, "large": 30, "language": 40, "models": 90}
+    monkeypatch.setattr(search_bm25, "has_term_df", lambda conn: True)
+    monkeypatch.setattr(search_bm25, "doc_freq", lambda conn, w: freq.get(w, 0))
+    assert survey.topic_terms(conn, "Mixture of experts for large language models") == {"mixtur", "expert"}
+    assert survey.mentions("GShard scales Sparsely-Gated Mixture-of-Experts layers", {"expert"})
+    assert not survey.mentions("Attention is all you need", {"expert"})
+
+
+def test_reference_with_topic_word_passes_second_gate(tmp_path, monkeypatch):
+    _fake_llm(monkeypatch)
+    conn, pipeline = _exact_world(tmp_path)
+    monkeypatch.setattr(survey, "related", lambda conn, index, seeds, k=10: [])
+    rel = {A[0]: 1.0, A[1]: 1.0, A[2]: 0.95, A[3]: 0.9, A[4]: 0.8, A[5]: 0.86, B[4]: 0.86}
+    monkeypatch.setattr(survey, "topical_relevance", lambda *a, **kw: (rel, [1.0, 1.0, 0.95, 0.9, 0.8]))
+    monkeypatch.setattr(survey, "topic_terms", lambda conn, topic: {"expert"})
+    monkeypatch.setattr(scholar, "references", lambda pid, limit=200: [
+        {"id": A[5], "citations": 10, "year": 2020}, {"id": B[4], "citations": 10, "year": 2020}])
+    pipeline.search = lambda text, k=10: {"results": [{"id": pid, "score": 1.0} for pid in A[:5]], "accepted": True}
+    out = survey.build_broad(conn, connect(tmp_path / "c.db"), pipeline, "experts", seed_ids=[A[0]], n_sources=6,
+                             dry_run=True)
+    s2 = out["scholar"]
+    assert A[5] in out["candidate_ids"] and B[4] not in out["candidate_ids"]
+    assert s2["references_by_term"] == 1 and s2["references_rejected"] == 1 and s2["topic_terms"] == ["expert"]

@@ -14,8 +14,9 @@ def print_dry_run(result: dict) -> None:
     print(f"KURU ÇALIŞTIRMA | konu: {result['topic']} | tür: {result['doc_type']}")
     s2 = result["scholar"]
     print(f"Semantic Scholar: {'tamam' if s2['ok'] else 'kullanılamadı'}, kaynakçadan eklenen: "
-          f"{s2['reference_additions']}, kaynakçadan elenen: {s2['references_rejected']}, "
-          f"ilgi eşikleri: {s2.get('relevance_gates')}")
+          f"{s2['reference_additions']} (kelime yoluyla: {s2.get('references_by_term', 0)}), kaynakçadan elenen: "
+          f"{s2['references_rejected']}, ilgi eşikleri: {s2.get('relevance_gates')}, "
+          f"ayırt edici kelimeler: {s2.get('topic_terms')}")
     print(f"Aday: {result['candidates']}, eşik altında kalan: {result['off_topic_candidates']}, "
           f"seçilen kaynak: {result['screened']}, yedekten eklenen: {len(result['backfilled'])}")
     for t in result["themes"]:

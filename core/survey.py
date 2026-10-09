@@ -10,7 +10,7 @@ import numpy as np
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 
-from core import cards, citations, config, coverage, fulltext, llm, scholar, writer
+from core import cards, citations, config, coverage, fulltext, llm, scholar, search_bm25, writer
 from core.arxiv_ids import normalize_id
 from core.related import related
 
@@ -125,10 +125,25 @@ def merge_small(labels: np.ndarray, vectors: np.ndarray, min_size: int = 3) -> n
     return np.array([mapping[c] for c in labels.tolist()], dtype=int)
 
 
+def topic_terms(conn: sqlite3.Connection, topic: str, max_share: float = 0.05) -> set[str]:
+    if not search_bm25.has_term_df(conn):
+        return set()
+    total = conn.execute("SELECT MAX(pk) FROM papers").fetchone()[0] or 0
+    df = {w: search_bm25.doc_freq(conn, w) for w in search_bm25.query_words(topic)}
+    if not total or not any(df.values()):
+        return set()
+    rare = {search_bm25._stem(w) for w, d in df.items() if 0 < d <= max_share * total}
+    return rare or {search_bm25._stem(min((w for w in df if df[w]), key=df.get))}
+
+
+def mentions(text: str, terms: set) -> bool:
+    return bool(terms) and any(search_bm25._stem(w) in terms for w in search_bm25._WORD.findall((text or "").lower()))
+
+
 def topical_relevance(conn: sqlite3.Connection, index, fused: dict[str, float], seeds: list[str], extra=(),
                       top: int = 10) -> tuple[dict[str, float], list[float]]:
     searched = [pid for pid, _ in sorted(fused.items(), key=lambda kv: -kv[1])]
-    pool = list(dict.fromkeys(searched + sorted(extra)))
+    pool = list(dict.fromkeys(searched + sorted(extra) + list(seeds)))
     if not pool:
         return {}, []
     ids, vectors = vectors_for(conn, index, pool)
@@ -286,18 +301,27 @@ def build_broad(conn: sqlite3.Connection, cache: sqlite3.Connection, pipeline, t
     gate_ref = float(np.percentile(base, 25)) if base else -2.0
     gate_keep = float(np.percentile(base, 10)) if base else -2.0
     on_topic = lambda pid, gate: pid in seeds or relevance.get(pid, -2.0) >= gate
+    terms = topic_terms(conn, topic)
+    texts = {}
+    for chunk in [sorted(set(fused) | in_corpus)[i:i + 900] for i in range(0, len(set(fused) | in_corpus), 900)]:
+        texts.update({r[0]: f"{r[1]} {r[2]}" for r in conn.execute(
+            f"SELECT id, title, abstract FROM papers WHERE id IN ({','.join('?' * len(chunk))})", chunk)})
+    lexical = lambda pid: on_topic(pid, gate_keep) and mentions(texts.get(pid, ""), terms)
+    trusted = lambda pid: on_topic(pid, gate_ref) or lexical(pid)
     cite = {}
     if use_scholar and fused and "error" not in s2:
         try:
-            allowed = {pid for pid in in_corpus if on_topic(pid, gate_ref)}
+            allowed = {pid for pid in in_corpus if trusted(pid)}
             s2["references_rejected"] = len({pid for pid in in_corpus - allowed if pid not in fused})
+            s2["references_by_term"] = len({pid for pid in allowed if not on_topic(pid, gate_ref) and pid not in fused})
             s2["reference_additions"] = add_references(fused, refs, allowed, excluded | set(seeds))
             info = scholar.batch(list(fused))
-            cite = {pid: v for pid, v in citation_scores(info, datetime.now().year).items() if on_topic(pid, gate_ref)}
+            cite = {pid: v for pid, v in citation_scores(info, datetime.now().year).items() if trusted(pid)}
             s2.update(ok=True, with_citations=len(info))
         except Exception as e:
             s2["error"] = f"{type(e).__name__}: {e}"[:200]
     s2["relevance_gates"] = {"references": round(gate_ref, 4), "keep": round(gate_keep, 4)}
+    s2["topic_terms"] = sorted(terms)
     scores = rerank(fused, cite)
     on_topic_scores = {pid: v for pid, v in scores.items() if on_topic(pid, gate_keep)}
     pool = list(fused)
