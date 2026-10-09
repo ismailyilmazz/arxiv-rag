@@ -73,7 +73,7 @@ def citation_scores(info: dict[str, dict], now_year: int) -> dict[str, float]:
     return {pid: (math.log1p(v) / top if top else 0.0) for pid, v in per_year.items()}
 
 
-def rerank(fused: dict[str, float], cite: dict[str, float], weight: float = 0.4) -> dict[str, float]:
+def rerank(fused: dict[str, float], cite: dict[str, float], weight: float = 0.3) -> dict[str, float]:
     top = max(fused.values(), default=0.0) or 1.0
     return {pid: (1 - weight) * f / top + weight * cite.get(pid, 0.0) for pid, f in fused.items()}
 
@@ -126,22 +126,59 @@ def merge_small(labels: np.ndarray, vectors: np.ndarray, min_size: int = 3) -> n
 
 
 def topical_relevance(conn: sqlite3.Connection, index, fused: dict[str, float], seeds: list[str], extra=(),
-                      top: int = 10, pct: float = 25, margin: float = 0.05) -> tuple[dict[str, float], float]:
+                      top: int = 10) -> tuple[dict[str, float], list[float]]:
     searched = [pid for pid, _ in sorted(fused.items(), key=lambda kv: -kv[1])]
     pool = list(dict.fromkeys(searched + sorted(extra)))
     if not pool:
-        return {}, -1.0
+        return {}, []
     ids, vectors = vectors_for(conn, index, pool)
     row = {pid: i for i, pid in enumerate(ids)}
     anchor_ids = [p for p in seeds if p in row] + [p for p in searched[:top] if p in row]
     if not anchor_ids:
-        return {}, -1.0
+        return {}, []
     anchor = vectors[[row[p] for p in anchor_ids]].mean(axis=0)
     anchor = anchor / (np.linalg.norm(anchor) + 1e-9)
     norms = np.linalg.norm(vectors, axis=1) + 1e-9
     relevance = {pid: float(vectors[i] @ anchor / norms[i]) for pid, i in row.items()}
-    base = [relevance[p] for p in searched if p in relevance]
-    return relevance, float(np.percentile(base, pct)) - margin
+    return relevance, [relevance[p] for p in searched if p in relevance]
+
+
+def backfill(conn: sqlite3.Connection, index, themes: list[dict], scores: dict[str, float], used: set,
+             n_target: int, titles: dict[str, str], max_surveys: int = 2) -> list[str]:
+    kept = [pid for t in themes for pid in t["ids"]]
+    need = n_target - len(kept)
+    if need <= 0 or not themes:
+        return []
+    surveys = sum(is_survey(titles.get(p, "")) for p in kept)
+    extra = []
+    for pid, _ in sorted(scores.items(), key=lambda kv: -kv[1]):
+        if len(extra) >= need:
+            break
+        if pid in used or pid in kept:
+            continue
+        if is_survey(titles.get(pid, "")):
+            if surveys >= max_surveys:
+                continue
+            surveys += 1
+        extra.append(pid)
+    if not extra:
+        return []
+    ids, vectors = vectors_for(conn, index, kept + extra)
+    row = {pid: i for i, pid in enumerate(ids)}
+    centroids = []
+    for t in themes:
+        members = [row[p] for p in t["ids"] if p in row]
+        c = vectors[members].mean(axis=0) if members else None
+        centroids.append(None if c is None else c / (np.linalg.norm(c) + 1e-9))
+    added = []
+    for pid in extra:
+        if pid not in row:
+            continue
+        v = vectors[row[pid]] / (np.linalg.norm(vectors[row[pid]]) + 1e-9)
+        sims = [float(v @ c) if c is not None else -2.0 for c in centroids]
+        themes[int(np.argmax(sims))]["ids"].append(pid)
+        added.append(pid)
+    return added
 
 
 def material_text(s: dict) -> str:
@@ -150,6 +187,8 @@ def material_text(s: dict) -> str:
 
 
 def vectors_for(conn: sqlite3.Connection, index, ids: list[str]) -> tuple[list[str], np.ndarray]:
+    if not ids:
+        return [], np.zeros((0, index.vectors.shape[1]), dtype=np.float32)
     pk_of = dict(conn.execute(f"SELECT id, pk FROM papers WHERE id IN ({','.join('?' * len(ids))})", ids).fetchall())
     positions = index._positions()
     kept = [pid for pid in ids if pid in pk_of and pk_of[pid] < len(positions) and positions[pk_of[pid]] >= 0]
@@ -164,7 +203,12 @@ def cluster(vectors: np.ndarray, k_range: tuple[int, int] = (3, 6), seed: int = 
     best, best_score = None, -2.0
     for k in range(k_range[0], min(k_range[1], n - 1) + 1):
         labels = KMeans(n_clusters=k, n_init=10, random_state=seed).fit_predict(vectors)
-        score = silhouette_score(vectors, labels, metric="cosine")
+        if len(set(labels.tolist())) < 2:
+            continue
+        try:
+            score = silhouette_score(vectors, labels, metric="cosine")
+        except ValueError:
+            continue
         if score > best_score:
             best, best_score = labels, score
     return best if best is not None else np.zeros(n, dtype=int)
@@ -214,7 +258,7 @@ def build_broad(conn: sqlite3.Connection, cache: sqlite3.Connection, pipeline, t
                 doc_type: str = "survey", seed_ids: list[str] = (), lang: str = "en", n_sources: int = 30,
                 max_deep: int = 6, exclude: tuple = (), card_model: Optional[str] = None,
                 write_model: Optional[str] = None, fetcher: Optional[Callable] = None, policy: Optional[str] = None,
-                focus: Optional[str] = None, use_scholar: bool = True) -> dict:
+                focus: Optional[str] = None, use_scholar: bool = True, dry_run: bool = False) -> dict:
     if doc_type not in writer.BROAD:
         raise ValueError(f"Bilinmeyen tür: {doc_type}. Seçenekler: {', '.join(writer.BROAD)}")
     card_model = card_model or config.LLM_CARD_MODEL
@@ -229,42 +273,69 @@ def build_broad(conn: sqlite3.Connection, cache: sqlite3.Connection, pipeline, t
     queries, tokens["expand"] = expand_queries(subject, write_model)
     near = [r["id"] for r in related(conn, pipeline.index, seeds, k=10)] if seeds else []
     fused, rejected = collect(pipeline, queries, near, exclude=excluded)
-    s2 = {"ok": False, "anchors": [], "reference_additions": 0, "references_rejected": 0, "with_citations": 0,
-          "relevance_threshold": None}
-    cite = {}
+    s2 = {"ok": False, "anchors": [], "reference_additions": 0, "references_rejected": 0, "with_citations": 0}
+    refs, in_corpus = [], set()
     if use_scholar and fused:
         try:
-            anchors = seeds or [pid for pid, _ in sorted(fused.items(), key=lambda kv: -kv[1])[:3]]
-            refs = [scholar.references(pid) for pid in anchors]
+            s2["anchors"] = seeds or [pid for pid, _ in sorted(fused.items(), key=lambda kv: -kv[1])[:3]]
+            refs = [scholar.references(pid) for pid in s2["anchors"]]
             in_corpus = coverage.in_corpus(conn, {r["id"] for rs in refs for r in rs}) - excluded
-            relevance, threshold = topical_relevance(conn, pipeline.index, fused, seeds, in_corpus)
-            relevant = lambda pid: relevance.get(pid, -2.0) >= threshold
-            allowed = {pid for pid in in_corpus if relevant(pid)}
+        except Exception as e:
+            s2["error"], refs = f"{type(e).__name__}: {e}"[:200], []
+    relevance, base = topical_relevance(conn, pipeline.index, fused, seeds, in_corpus)
+    gate_ref = float(np.percentile(base, 25)) if base else -2.0
+    gate_keep = float(np.percentile(base, 10)) if base else -2.0
+    on_topic = lambda pid, gate: pid in seeds or relevance.get(pid, -2.0) >= gate
+    cite = {}
+    if use_scholar and fused and "error" not in s2:
+        try:
+            allowed = {pid for pid in in_corpus if on_topic(pid, gate_ref)}
             s2["references_rejected"] = len({pid for pid in in_corpus - allowed if pid not in fused})
             s2["reference_additions"] = add_references(fused, refs, allowed, excluded | set(seeds))
             info = scholar.batch(list(fused))
-            cite = {pid: v for pid, v in citation_scores(info, datetime.now().year).items() if relevant(pid)}
-            s2.update(ok=True, anchors=anchors, with_citations=len(info), relevance_threshold=round(threshold, 4))
+            cite = {pid: v for pid, v in citation_scores(info, datetime.now().year).items() if on_topic(pid, gate_ref)}
+            s2.update(ok=True, with_citations=len(info))
         except Exception as e:
             s2["error"] = f"{type(e).__name__}: {e}"[:200]
+    s2["relevance_gates"] = {"references": round(gate_ref, 4), "keep": round(gate_keep, 4)}
     scores = rerank(fused, cite)
+    on_topic_scores = {pid: v for pid, v in scores.items() if on_topic(pid, gate_keep)}
     pool = list(fused)
     titles = {r[0]: r[1] for i in range(0, len(pool), 900) for r in conn.execute(
         f"SELECT id, title FROM papers WHERE id IN ({','.join('?' * len(pool[i:i + 900]))})", pool[i:i + 900])}
-    screened, moved = screen(scores, seeds, n_sources, titles)
+    screened, moved = screen(on_topic_scores, seeds, n_sources, titles)
     ids, vectors = vectors_for(conn, pipeline.index, screened)
     if not ids:
         raise ValueError("Bu konu için yeterli makale bulunamadı (sorgular reddedildi ya da sonuç çıkmadı).")
+    for pid in ids:
+        titles.setdefault(pid, conn.execute("SELECT title FROM papers WHERE id = ?", (pid,)).fetchone()[0])
     labels = merge_small(cluster(vectors), vectors)
-    wanted = ids + [m for m in moved if m not in ids]
-    meta = {r[0]: {"title": r[1], "abstract": r[2], "authors": r[3], "published": r[4], "license": r[5]}
-            for r in conn.execute(f"SELECT id, title, abstract, authors, published, license FROM papers "
-                                  f"WHERE id IN ({','.join('?' * len(wanted))})", wanted)}
-    themes, tokens["themes"] = name_themes(subject, ids, labels, {pid: meta[pid]["title"] for pid in ids}, write_model)
+    themes, tokens["themes"] = name_themes(subject, ids, labels, {pid: titles[pid] for pid in ids}, write_model)
+    dropped = [pid for pid in ids if not any(pid in t["ids"] for t in themes)]
+    added = backfill(conn, pipeline.index, themes, on_topic_scores, set(screened) | set(moved), n_sources, titles)
     timings["retrieval_ms"] = round((time.perf_counter() - start) * 1000)
 
     kept = [pid for t in themes for pid in t["ids"]]
-    deep = pick_deep(themes, ids, vectors, seeds, max_deep, titles)
+    kept_ids, kept_vectors = vectors_for(conn, pipeline.index, kept)
+    wanted = kept + [m for m in moved if m not in kept]
+    meta = {r[0]: {"title": r[1], "abstract": r[2], "authors": r[3], "published": r[4], "license": r[5]}
+            for r in conn.execute(f"SELECT id, title, abstract, authors, published, license FROM papers "
+                                  f"WHERE id IN ({','.join('?' * len(wanted))})", wanted)}
+    deep = pick_deep(themes, kept_ids, kept_vectors, seeds, max_deep, titles)
+    if dry_run:
+        rel = lambda pid: round(relevance[pid], 4) if pid in relevance else None
+        return {
+            "dry_run": True, "topic": topic, "focus": focus, "doc_type": doc_type, "lang": lang, "queries": queries,
+            "rejected_queries": rejected, "scholar": s2, "candidates": len(fused),
+            "off_topic_candidates": len(scores) - len(on_topic_scores), "screened": len(kept),
+            "surveys_moved": moved, "backfilled": added, "candidate_ids": list(fused), "screened_ids": kept,
+            "cited": [], "deep": deep,
+            "themes": [{"name": t["name"], "size": len(t["ids"]),
+                        "papers": [{"id": pid, "title": titles.get(pid, ""), "relevance": rel(pid),
+                                    "deep": pid in deep} for pid in t["ids"]]} for t in themes],
+            "dropped_by_themes": [{"id": pid, "title": titles.get(pid, ""), "relevance": rel(pid)} for pid in dropped],
+            "tokens": tokens, "timings_ms": {"total_ms": round((time.perf_counter() - start) * 1000)},
+        }
     sources, number = [], {}
     for pid in deep + [p for p in kept if p not in deep]:
         number[pid] = len(sources) + 1
@@ -291,7 +362,8 @@ def build_broad(conn: sqlite3.Connection, cache: sqlite3.Connection, pipeline, t
         s["n_old"], s["n"] = s["n"], mapping.get(s["n"])
     cited = sorted([s for s in sources if s["n"]], key=lambda s: s["n"])
     further = [s for s in sources if not s["n"]] + [{"id": m, **meta[m]} for m in moved if m in meta]
-    report["name_mismatches"] = citations.name_mismatches(body, cited)
+    report["name_mismatches"] = citations.name_mismatches(body, cited, [titles[p] for p in kept if p in titles])
+    report["focus_drift"] = citations.focus_drift(body, topic, focus)
     report["meta_language"] = citations.meta_language(body)
     report["number_audit"] = citations.number_audit(body, {s["n"]: material_text(s) for s in cited})
     markdown = body.rstrip() + "\n\n" + citations.bibliography(cited, lang) + "\n" + \
@@ -301,8 +373,10 @@ def build_broad(conn: sqlite3.Connection, cache: sqlite3.Connection, pipeline, t
     return {
         "markdown": markdown, "topic": topic, "focus": focus, "doc_type": doc_type, "lang": lang,
         "queries": queries, "rejected_queries": rejected, "scholar": s2,
-        "candidates": len(fused), "screened": len(screened), "surveys_moved": moved,
-        "candidate_ids": list(fused), "screened_ids": screened,
+        "candidates": len(fused), "off_topic_candidates": len(scores) - len(on_topic_scores),
+        "screened": len(kept), "surveys_moved": moved, "dropped_by_themes": dropped, "backfilled": added,
+        "candidate_ids": list(fused), "screened_ids": kept,
+        "relevance": {pid: round(relevance[pid], 4) for pid in kept + dropped if pid in relevance},
         "themes": [{"name": t["name"], "size": len(t["ids"]),
                     "deep": [pid for pid in t["ids"] if pid in deep]} for t in themes],
         "deep": deep, "cited": [s["id"] for s in cited], "further_reading": [s["id"] for s in further],

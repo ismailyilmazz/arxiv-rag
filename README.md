@@ -257,8 +257,20 @@ oluştu (insan ve ölçüm değerlendirmesi). Düzeltmeler:
   raporda belirtilir. `S2_API_KEY` isteğe bağlıdır.
 - **Konu kapısı:** atıf sinyali konu kaymasına yol açtı (MoE taramasında "Attention Is All You Need" ve MMLU gibi
   çok atıflı genel makaleler iki tema oluşturdu). Konu çapası (tohumlar ve aramanın ilk 10 sonucunun ortalama
-  vektörü) kurulur; kaynakçadan gelen makale ve atıf bonusu sadece ilgi skoru, aramada bulunan adayların alt
-  çeyreğinin (eksi 0,05) üstündeyse geçer.
+  vektörü) kurulur ve her aday için kosinüs benzerliği hesaplanır. İlk denemede eşik "aramadakilerin alt çeyreği
+  eksi 0,05" idi; embedding uzayında bütün yapay zekâ makaleleri dar bir bantta (yaklaşık 0,85-0,95) toplandığı için
+  bu pay fazla geldi ve genel makaleler yine ilk 30'a girdi (ölçüm). Şimdiki eşikler paysızdır: kaynakçadan gelen
+  makale ve atıf bonusu için aramada bulunanların alt çeyreği, bütün adaylar için alt %10'u. Atıf ağırlığı 0,3.
+  Raporda her kaynağın ilgi skoru tutulur, eşikler veriyle ayarlanabilir.
+- **Yedekleme:** tema adlandırma bir kümeyi konu dışı diye atarsa, sıradaki konu içi adaylar en yakın temaya
+  eklenerek kaynak sayısı hedefe tamamlanır (önceki çalıştırmada 30 kaynaktan 8'i kalmış, metin kısalmıştı).
+- **Kesilme:** bir bölüm token sınırında kesilirse model kaldığı yerden bir kez devam eder; plan bölümlerinin
+  malzemesi sıkıştırıldı.
+- **Kuru çalıştırma:** `--dry-run` (notebook'ta `DRY_RUN = True`) sadece kaynakları seçer ve temaları kurar, metin
+  yazmaz; her temanın makalelerini ilgi skorlarıyla yazdırır. Maliyeti tek bir tema adlandırma isteğidir. Kota
+  harcamadan önce kaynak seçimini doğrulamak için kullanılır.
+- **Odak:** her bölüm promptunda konu aynen yazılır; Türkçe yazmak araştırmanın Türkçe hakkında olduğu anlamına
+  gelmez. Konu söylemediği halde metinde geçen "Türkçe/Turkish" sayılır (odak kayması).
 - **Survey sınırı:** en fazla 2 survey malzemeye girer, derin okunmaz; fazlası "İleri okuma" listesine gider.
 - **Küçük temalar:** 3 makaleden küçük kümeler anlamca en yakın kümeye katılır.
 - **Prompt:** yazım dili araştırma odağını belirlemez; açıklar sadece malzemenin söylediğinden türetilir;

@@ -106,9 +106,10 @@ def _year(s: dict) -> str:
     return (s.get("published") or "")[:4] or "n.d."
 
 
-def card_text(s: dict, keys=("problem", "method", "setup", "findings", "limitations")) -> str:
+def card_text(s: dict, keys=("problem", "method", "setup", "findings", "limitations"), limit: int = 0) -> str:
     lines = [f"[{s['n']}] {s['title']} ({_year(s)})"]
-    lines += [f"{k.capitalize()}: {s['card'][k]}" for k in keys if s["card"].get(k)]
+    lines += [f"{k.capitalize()}: {s['card'][k][:limit] if limit else s['card'][k]}" for k in keys
+              if s["card"].get(k)]
     return "\n".join(lines)
 
 
@@ -119,7 +120,7 @@ def summary_of(written: list[tuple[str, str]]) -> str:
     for heading, text in written:
         firsts = [re.split(r"(?<=[.!?])\s", p.strip(), maxsplit=1)[0]
                   for p in re.split(r"\n\s*\n", text) if p.strip() and not p.lstrip().startswith("#")]
-        lines.append(f"{heading}: " + " ".join(firsts)[:600])
+        lines.append(f"{heading}: " + " ".join(firsts)[:400])
     return "\n".join(lines)
 
 
@@ -156,9 +157,18 @@ def material_for(spec: dict, sources: list[dict], written: list[tuple[str, str]]
     return "\n\n".join(parts)
 
 
+CONTINUE = ("\n\nThe section you are writing currently ends with:\n{tail}\n\nContinue exactly from where it stops. "
+            "Do not repeat earlier text. Finish the section with complete sentences.")
+
+
 def _call(prompt: str, model: str, max_tokens: int) -> tuple[str, int, bool]:
     budget = max(400, min(max_tokens, TOKEN_BUDGET - len(prompt) // 3))
     text, tokens, finish = llm.complete(prompt, model=model, max_tokens=budget)
+    if finish == "length" and text.strip():
+        more_prompt = prompt + CONTINUE.format(tail=text[-1200:])
+        budget = max(400, min(max_tokens, TOKEN_BUDGET - len(more_prompt) // 3))
+        more, extra, finish = llm.complete(more_prompt, model=model, max_tokens=budget)
+        text, tokens = text.rstrip() + " " + more.lstrip(), tokens + extra
     return text, tokens, finish == "length"
 
 
@@ -210,8 +220,9 @@ def uncited_allowed(doc_type: str, lang: str) -> list[str]:
 BROAD_RULES = ("\n- Never mention summaries, cards, material, context sources or how this text was produced."
                "\n- A sentence that names a work must carry that work's own number. Do not claim that a work does "
                "not address something unless the material says so."
-               "\n- The language you write in does not define the research focus. Do not add a language, region or "
-               "domain focus that the topic does not state."
+               "\n- The research topic is exactly: {topic}. Writing in a given language does not make the research "
+               "about that language. Never narrow the topic to a language, country or domain it does not name; if "
+               "you need a novel angle, derive it from the gaps the material states."
                "\n- Derive gaps and limitations only from what the material states.")
 
 
@@ -237,8 +248,8 @@ BROAD = {
             THEMES,
             fixed("comparison", "Comparison and Discussion", "Karşılaştırma ve Tartışma", "setup",
                   "Compare the representative works across the themes. Include one markdown table with the columns "
-                  "Work, Year, Key idea, Setting or scale and Main result, where every row cites its work. Then "
-                  "discuss the trade-offs.", 2500),
+                  "Work, Year, Key idea, Setting or scale and Main result, with at least one row for every theme, "
+                  "where every row cites its work. Then discuss the trade-offs.", 2500),
             fixed("open", "Open Problems", "Açık Problemler", "limits",
                   "Derive open problems and research directions from the limitations and gaps of the works. Tie "
                   "every problem to the works that motivate it, with [n].", 1500),
@@ -287,8 +298,8 @@ BROAD = {
             THEMES,
             fixed("agreements", "Agreements and Differences", "Ortak Noktalar ve Farklar", "setup",
                   "Compare the findings across the themes point by point: where they agree, where they conflict and "
-                  "why. Include one markdown table with the columns Work, Year, Setting and Main finding, where "
-                  "every row cites its work.", 2500),
+                  "why. Include one markdown table with the columns Work, Year, Setting and Main finding, with at "
+                  "least one row for every theme, where every row cites its work.", 2500),
             fixed("implications", "Implications", "Çıkarımlar", "limits",
                   "Discuss the implications for research and practice. Tie every implication to the findings it "
                   "builds on, with [n].", 1500),
@@ -317,9 +328,12 @@ def broad_material(kind: str, sources: list[dict], themes: list[dict], written: 
     if kind == "brief":
         return "\n\n".join(card_text(s, ("problem", "method")) for s in deep)
     if kind == "full":
-        return "\n\n".join(card_text(s) for s in deep) + so_far
+        return "\n\n".join(card_text(s, limit=350) for s in deep) + so_far
     if kind == "setup":
-        return "\n\n".join(card_text(s, ("method", "setup", "findings")) for s in deep) + so_far
+        others = [s for t in themes for s in [x for x in sources if x["id"] in t["ids"] and not x.get("card")][:3]]
+        lines = "\n".join(work_line(s) for s in others)
+        return "\n\n".join(card_text(s, ("method", "setup", "findings"), limit=500) for s in deep) + \
+            ("\n\nOther representative works by theme:\n" + lines if lines else "") + so_far
     if kind == "limits":
         return "\n\n".join(card_text(s, ("findings", "limitations")) for s in deep) + so_far
     return so_far.strip()
@@ -343,7 +357,7 @@ def write_broad(doc_type: str, sources: list[dict], themes: list[dict], topic: s
             label=label, language=language, outline=outline, written=summary_of(written),
             target=f'the section "{item["heading"]}"', task=item["task"].format(n=n, k=len(themes)),
             context_rule="", material=broad_material(item["kind"], sources, themes, written, item["theme"]),
-            style=STYLE, n=n, extra=BROAD_RULES)
+            style=STYLE, n=n, extra=BROAD_RULES.format(topic=topic))
         text, tokens, truncated = _call(prompt, model, item["tokens"])
         used += tokens
         report.append({"section": item["key"], "source": None, "tokens": tokens, "truncated": truncated})

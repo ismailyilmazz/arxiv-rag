@@ -200,36 +200,81 @@ def test_scholar_parses_batch_and_references(monkeypatch):
     assert scholar.references("2101.03961") == [{"id": "1701.06538", "citations": 3000, "year": 2017}]
 
 
+def _exact_world(tmp_path):
+    conn = connect(tmp_path / "papers.db")
+    init_db(conn)
+    upsert_papers(conn, [make_row(pid, TITLES[pid], f"We propose method {pid} with 5 experts.") for pid in A + B])
+    pk = dict(conn.execute("SELECT id, pk FROM papers").fetchall())
+    vectors = np.array([[1, 0, 0, 0]] * len(A) + [[0, 1, 0, 0]] * len(B), dtype=np.float16)
+    return conn, FakePipeline(DenseIndex(vectors, np.array([pk[p] for p in A + B]), {"model": "x"}))
+
+
 def test_references_and_citations_only_count_when_on_topic(tmp_path, monkeypatch):
     _fake_llm(monkeypatch)
-    conn, pipeline = _world(tmp_path)
+    conn, pipeline = _exact_world(tmp_path)
+    monkeypatch.setattr(survey, "related", lambda conn, index, seeds, k=10: [])
     monkeypatch.setattr(scholar, "references", lambda pid, limit=200: [
         {"id": A[5], "citations": 50, "year": 2020}, {"id": B[4], "citations": 90000, "year": 2017},
         {"id": "0000.00000", "citations": 5, "year": 2020}])
     monkeypatch.setattr(scholar, "batch", lambda ids: {pid: {"citations": 90000 if pid == B[4] else 1, "year": 2020}
                                                         for pid in ids})
-    monkeypatch.setattr(survey, "related", lambda conn, index, seeds, k=10: [])
     pipeline.search = lambda text, k=10: {"results": [{"id": pid, "score": 1.0} for pid in A[:4]], "accepted": True}
     out = survey.build_broad(conn, connect(tmp_path / "c.db"), pipeline, "experts", seed_ids=[A[0]], n_sources=5,
                              fetcher=lambda pid: fulltext.FullText(pid, "html", []))
     s2 = out["scholar"]
     assert A[5] in out["candidate_ids"] and B[4] not in out["candidate_ids"]
-    assert s2["reference_additions"] == 1 and s2["references_rejected"] == 1 and s2["relevance_threshold"] > 0.5
-    assert "0000.00000" not in out["candidate_ids"]
+    assert s2["reference_additions"] == 1 and s2["references_rejected"] == 1
+    assert s2["relevance_gates"]["references"] > 0.9 and "0000.00000" not in out["candidate_ids"]
+
+
+def test_off_topic_search_hits_are_dropped_before_screening(tmp_path, monkeypatch):
+    _fake_llm(monkeypatch)
+    conn, pipeline = _exact_world(tmp_path)
+    monkeypatch.setattr(survey, "related", lambda conn, index, seeds, k=10: [])
+    pipeline.search = lambda text, k=10: {"results": [{"id": pid, "score": 1.0} for pid in A + [B[0]]],
+                                          "accepted": True}
+    out = survey.build_broad(conn, connect(tmp_path / "c.db"), pipeline, "experts", n_sources=10,
+                             fetcher=lambda pid: fulltext.FullText(pid, "html", []))
+    assert out["off_topic_candidates"] == 1 and B[0] not in out["screened_ids"]
+
+
+def test_backfill_replaces_dropped_theme(tmp_path, monkeypatch):
+    _fake_llm(monkeypatch)
+
+    def chat(prompt, model, **kw):
+        if "search queries" in prompt:
+            return {"queries": ["q"]}, 1
+        if "clusters of paper titles" in prompt:
+            blocks = re.split(r"(?=Cluster \d+:)", prompt)
+            themes = [{"cluster": int(re.match(r"Cluster (\d+)", b).group(1)), "name": "T", "description": "",
+                       "off_topic": "Dense retrieval" in b} for b in blocks if b.startswith("Cluster")]
+            return {"themes": themes, "order": []}, 1
+        return {"problem": "P.", "method": "M.", "setup": "S.", "findings": "F.", "limitations": "L."}, 1
+
+    monkeypatch.setattr(llm, "chat", chat)
+    conn, pipeline = _exact_world(tmp_path)
+    monkeypatch.setattr(survey, "related", lambda conn, index, seeds, k=10: [])
+    order = [A[0], A[1], A[2], B[0], B[1], B[2], A[3], A[4], A[5]]
+    pipeline.search = lambda text, k=10: {"results": [{"id": pid, "score": 1.0} for pid in order], "accepted": True}
+    monkeypatch.setattr(survey, "topical_relevance", lambda *a, **kw: ({pid: 1.0 for pid in A + B}, [1.0] * 9))
+    out = survey.build_broad(conn, connect(tmp_path / "c.db"), pipeline, "experts", n_sources=6,
+                             fetcher=lambda pid: fulltext.FullText(pid, "html", []))
+    assert set(out["dropped_by_themes"]) == {B[0], B[1], B[2]}
+    assert set(out["backfilled"]) == {A[3], A[4], A[5]} and out["screened"] == 6
 
 
 def test_citation_prior_reranks():
-    scores = survey.rerank({"x": 1.0, "y": 0.5}, survey.citation_scores(
+    scores = survey.rerank({"x": 1.0, "y": 0.8}, survey.citation_scores(
         {"x": {"citations": 1, "year": 2025}, "y": {"citations": 5000, "year": 2025}}, 2026))
     assert scores["y"] > scores["x"]
 
 
-def test_topical_relevance_threshold(tmp_path):
-    conn, pipeline = _world(tmp_path)
-    relevance, threshold = survey.topical_relevance(conn, pipeline.index, {pid: 1.0 for pid in A[:4]}, [A[0]],
-                                                    {A[5], B[0]})
-    assert relevance[A[5]] >= threshold > relevance[B[0]]
-    assert survey.topical_relevance(conn, pipeline.index, {}, []) == ({}, -1.0)
+def test_topical_relevance_values(tmp_path):
+    conn, pipeline = _exact_world(tmp_path)
+    relevance, base = survey.topical_relevance(conn, pipeline.index, {pid: 1.0 for pid in A[:4]}, [A[0]],
+                                               {A[5], B[0]})
+    assert relevance[A[5]] > 0.99 and relevance[B[0]] < 0.01 and len(base) == 4
+    assert survey.topical_relevance(conn, pipeline.index, {}, []) == ({}, [])
 
 
 def test_scholar_failure_does_not_stop_generation(tmp_path, monkeypatch):
@@ -269,3 +314,58 @@ def test_number_audit_flags_numbers_missing_from_source():
             "GPT-3 sized models matter [1].")
     report = citations.number_audit(text, materials)
     assert report["checked"] == 4 and report["unsupported"] == 1 and "[1] 14" in report["examples"][0]
+
+
+def test_generic_alias_is_not_a_name_and_headings_are_not_meta():
+    sources = [{"n": 1, "title": "A Comprehensive Survey of Retrieval-Augmented Generation (RAG)"},
+               {"n": 2, "title": "REALM: Retrieval-Augmented Language Model Pre-Training"}]
+    text = " ".join(f"RAG improves answers in setting {i} [2]." for i in range(8)) + " REALM pretrains [1]."
+    report = citations.name_mismatches(text, sources)
+    assert report["count"] == 1 and "REALM pretrains" in report["examples"][0]
+    assert citations.meta_language("## Summary\n\nExperts route tokens.")["count"] == 0
+
+
+def test_number_audit_reads_grouped_thousands_and_skips_question_numbers():
+    report = citations.number_audit("GShard used 2 048 TPU cores [1]. Soru 2: retrieval nasıl iyileşir [1].",
+                                    {1: "trained on 2048 TPU v3 cores"})
+    assert report == {"checked": 1, "unsupported": 0, "examples": []}
+
+
+def test_focus_drift_counts_unrequested_language_focus():
+    text = "Türkçe veri setlerinde RAG. Türkiye'deki uygulamalar."
+    assert citations.focus_drift(text, "Retrieval-augmented generation")["count"] == 2
+    assert citations.focus_drift(text, "RAG", focus="Türkçe")["count"] == 0
+
+
+def test_truncated_section_continues_once(monkeypatch):
+    calls = []
+
+    def complete(prompt, model, max_tokens):
+        calls.append(prompt)
+        return ("First half of the" , 10, "length") if len(calls) == 1 else ("sentence ends here [1].", 5, "stop")
+
+    monkeypatch.setattr(llm, "complete", complete)
+    from core import writer
+    text, tokens, truncated = writer._call("PROMPT", "m", 1000)
+    assert text == "First half of the sentence ends here [1]." and tokens == 15 and truncated is False
+    assert "currently ends with:\nFirst half of the" in calls[1]
+
+
+def test_cluster_survives_identical_vectors():
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        labels = survey.cluster(np.array([[1, 0, 0, 0]] * 8, dtype=np.float32))
+    assert set(labels.tolist()) == {0}
+
+
+def test_dry_run_selects_sources_without_writing(tmp_path, monkeypatch):
+    _fake_llm(monkeypatch)
+    monkeypatch.setattr(llm, "complete", lambda *a, **kw: pytest.fail("kuru çalıştırmada yazım olmamalı"))
+    conn, pipeline = _world(tmp_path)
+    out = survey.build_broad(conn, connect(tmp_path / "c.db"), pipeline, "experts", seed_ids=[A[0]], n_sources=8,
+                             dry_run=True, fetcher=lambda pid: pytest.fail("kuru çalıştırmada tam metin çekilmemeli"))
+    assert out["dry_run"] and "markdown" not in out and out["cited"] == []
+    papers = [p for t in out["themes"] for p in t["papers"]]
+    assert len(papers) == out["screened"] and all(p["title"] for p in papers)
+    assert any(p["deep"] for p in papers) and A[0] in out["deep"]

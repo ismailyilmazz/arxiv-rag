@@ -1,6 +1,7 @@
 # %%
 REPO_URL = "https://github.com/ismailyilmazz/arxiv-rag.git"
 DB = "/kaggle/working/papers_full.db"
+DRY_RUN = True
 RUNS = [
     {"topic": "Mixture of experts for large language models", "type": "survey", "lang": "en",
      "seeds": ["1701.06538", "2101.03961", "2401.04088"], "gold": "2407.06204"},
@@ -55,9 +56,11 @@ for run in RUNS:
         print(pid, "->", row[0] if row else "KORPUSTA YOK")
 
 # %%
+flag = "--dry-run" if DRY_RUN else ""
 for run in RUNS:
     seeds, topic, gold, kind, lang = " ".join(run["seeds"]), run["topic"], run["gold"], run["type"], run["lang"]
-    !python -m scripts.generate_broad --topic "{topic}" --type {kind} --lang {lang} --seeds {seeds} --gold-survey {gold} --db {DB} --vectors-dir {VEC} --models-dir {MODELS} --cache-db /kaggle/working/cache.db --out-dir /kaggle/working/generations
+    !python -m scripts.generate_broad --topic "{topic}" --type {kind} --lang {lang} --seeds {seeds} --gold-survey {gold} --db {DB} --vectors-dir {VEC} --models-dir {MODELS} --cache-db /kaggle/working/cache.db --out-dir /kaggle/working/generations {flag}
 
-shutil.make_archive("/kaggle/working/generations", "zip", "/kaggle/working/generations")
-print("İndir: Output -> generations.zip", sorted(os.listdir("/kaggle/working/generations")))
+if not DRY_RUN:
+    shutil.make_archive("/kaggle/working/generations", "zip", "/kaggle/working/generations")
+    print("İndir: Output -> generations.zip", sorted(os.listdir("/kaggle/working/generations")))

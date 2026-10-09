@@ -117,15 +117,18 @@ def aliases(title: str) -> set[str]:
     return out
 
 
-def name_mismatches(markdown: str, sources: list[dict]) -> dict:
+def name_mismatches(markdown: str, sources: list[dict], pool_titles=(), generic_share: float = 0.1) -> dict:
     names = {s["n"]: aliases(s["title"]) for s in sources}
     counts: dict[str, int] = {}
-    for alias_set in names.values():
+    for alias_set in list(names.values()) + [aliases(t) for t in pool_titles]:
         for a in alias_set:
             counts[a] = counts.get(a, 0) + 1
-    unique = {n: {a for a in al if counts[a] == 1} for n, al in names.items()}
+    sentences = [x for x in re.split(r"(?<=[.!?])\s+", markdown) if not x.lstrip().startswith("#")]
+    seen = lambda a: sum(bool(re.search(rf"(?<![\w-]){re.escape(a)}(?![\w-])", x)) for x in sentences)
+    limit = max(3, generic_share * len(sentences))
+    unique = {n: {a for a in al if counts[a] == 1 and seen(a) <= limit} for n, al in names.items()}
     examples, total = [], 0
-    for sentence in re.split(r"(?<=[.!?])\s+", markdown):
+    for sentence in sentences:
         cited = {m for g in _CITE.findall(sentence) for m in numbers_in(g)}
         if not cited:
             continue
@@ -138,7 +141,8 @@ def name_mismatches(markdown: str, sources: list[dict]) -> dict:
 
 
 def meta_language(markdown: str) -> dict:
-    found = [m.group(0) for m in _META.finditer(markdown)]
+    body = "\n".join(line for line in markdown.splitlines() if not line.lstrip().startswith("#"))
+    found = [m.group(0) for m in _META.finditer(body)]
     return {"count": len(found), "examples": found[:5]}
 
 
@@ -160,12 +164,17 @@ def _norm_number(raw: str):
     if re.fullmatch(r"\d{1,3}(,\d{3})+", raw):
         raw = raw.replace(",", "")
     raw = raw.replace(",", ".")
-    if re.fullmatch(r"(19|20)\d\d", raw):
+    if re.fullmatch(r"\d{4}", raw) and 1950 <= int(raw) <= 2035:
         return None
     return raw.rstrip("0").rstrip(".") if "." in raw else raw
 
 
+_GROUPED = re.compile(r"(?<=\d)[ \u00a0\u2009\u202f](?=\d{3}(?!\d))")
+_LIST_NO = re.compile(r"\b(?:Soru|Question|RQ|Research question|Araştırma sorusu)\s*\d+", re.IGNORECASE)
+
+
 def _numbers(text: str, pattern) -> set[str]:
+    text = _LIST_NO.sub(" ", _GROUPED.sub("", text))
     return {v for v in (_norm_number(m) for m in pattern.findall(text)) if v}
 
 
@@ -187,3 +196,13 @@ def number_audit(markdown: str, materials: dict[int, str]) -> dict:
                 if len(examples) < 5:
                     examples.append(f"[{n}] {value}: {' '.join(plain.split())[:160]}")
     return {"checked": checked, "unsupported": missing, "examples": examples}
+
+
+_TURKISH = re.compile(r"\b(Türkçe\w*|Turkish|Türkiye\w*|Turkey)\b", re.IGNORECASE)
+
+
+def focus_drift(markdown: str, topic: str, focus: str = None) -> dict:
+    if _TURKISH.search(f"{topic} {focus or ''}"):
+        return {"count": 0, "examples": []}
+    found = [m.group(0) for m in _TURKISH.finditer(markdown)]
+    return {"count": len(found), "examples": found[:5]}
