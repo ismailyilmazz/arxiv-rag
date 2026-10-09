@@ -53,7 +53,8 @@ def main() -> None:
                                                if result["rejected_queries"] else ""))
     s2 = result["scholar"]
     print(f"Semantic Scholar: {'tamam' if s2['ok'] else 'kullanılamadı ' + s2.get('error', '')}, "
-          f"atıf bilgisi olan aday: {s2['with_citations']}, kaynakçadan eklenen aday: {s2['reference_additions']}")
+          f"atıf bilgisi olan aday: {s2['with_citations']}, kaynakçadan eklenen aday: {s2['reference_additions']}, "
+          f"konu dışı diye elenen kaynakça makalesi: {s2['references_rejected']} (ilgi eşiği {s2['relevance_threshold']})")
     print(f"Aday: {result['candidates']}, elenen sonrası: {result['screened']}, atıflanan: {len(result['cited'])}, "
           f"ileri okuma: {len(result['further_reading'])} (ileri okumaya taşınan survey: {len(result['surveys_moved'])})")
     for t in result["themes"]:

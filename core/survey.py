@@ -125,6 +125,25 @@ def merge_small(labels: np.ndarray, vectors: np.ndarray, min_size: int = 3) -> n
     return np.array([mapping[c] for c in labels.tolist()], dtype=int)
 
 
+def topical_relevance(conn: sqlite3.Connection, index, fused: dict[str, float], seeds: list[str], extra=(),
+                      top: int = 10, pct: float = 25, margin: float = 0.05) -> tuple[dict[str, float], float]:
+    searched = [pid for pid, _ in sorted(fused.items(), key=lambda kv: -kv[1])]
+    pool = list(dict.fromkeys(searched + sorted(extra)))
+    if not pool:
+        return {}, -1.0
+    ids, vectors = vectors_for(conn, index, pool)
+    row = {pid: i for i, pid in enumerate(ids)}
+    anchor_ids = [p for p in seeds if p in row] + [p for p in searched[:top] if p in row]
+    if not anchor_ids:
+        return {}, -1.0
+    anchor = vectors[[row[p] for p in anchor_ids]].mean(axis=0)
+    anchor = anchor / (np.linalg.norm(anchor) + 1e-9)
+    norms = np.linalg.norm(vectors, axis=1) + 1e-9
+    relevance = {pid: float(vectors[i] @ anchor / norms[i]) for pid, i in row.items()}
+    base = [relevance[p] for p in searched if p in relevance]
+    return relevance, float(np.percentile(base, pct)) - margin
+
+
 def material_text(s: dict) -> str:
     card = " ".join(str(v) for v in (s.get("card") or {}).values())
     return " ".join([s.get("title") or "", s.get("abstract") or "", s.get("key_sentences") or "", card])
@@ -210,17 +229,22 @@ def build_broad(conn: sqlite3.Connection, cache: sqlite3.Connection, pipeline, t
     queries, tokens["expand"] = expand_queries(subject, write_model)
     near = [r["id"] for r in related(conn, pipeline.index, seeds, k=10)] if seeds else []
     fused, rejected = collect(pipeline, queries, near, exclude=excluded)
-    s2 = {"ok": False, "anchors": [], "reference_additions": 0, "with_citations": 0}
+    s2 = {"ok": False, "anchors": [], "reference_additions": 0, "references_rejected": 0, "with_citations": 0,
+          "relevance_threshold": None}
     cite = {}
     if use_scholar and fused:
         try:
             anchors = seeds or [pid for pid, _ in sorted(fused.items(), key=lambda kv: -kv[1])[:3]]
             refs = [scholar.references(pid) for pid in anchors]
-            in_corpus = coverage.in_corpus(conn, {r["id"] for rs in refs for r in rs})
-            s2["reference_additions"] = add_references(fused, refs, in_corpus, excluded | set(seeds))
+            in_corpus = coverage.in_corpus(conn, {r["id"] for rs in refs for r in rs}) - excluded
+            relevance, threshold = topical_relevance(conn, pipeline.index, fused, seeds, in_corpus)
+            relevant = lambda pid: relevance.get(pid, -2.0) >= threshold
+            allowed = {pid for pid in in_corpus if relevant(pid)}
+            s2["references_rejected"] = len({pid for pid in in_corpus - allowed if pid not in fused})
+            s2["reference_additions"] = add_references(fused, refs, allowed, excluded | set(seeds))
             info = scholar.batch(list(fused))
-            cite = citation_scores(info, datetime.now().year)
-            s2.update(ok=True, anchors=anchors, with_citations=len(info))
+            cite = {pid: v for pid, v in citation_scores(info, datetime.now().year).items() if relevant(pid)}
+            s2.update(ok=True, anchors=anchors, with_citations=len(info), relevance_threshold=round(threshold, 4))
         except Exception as e:
             s2["error"] = f"{type(e).__name__}: {e}"[:200]
     scores = rerank(fused, cite)

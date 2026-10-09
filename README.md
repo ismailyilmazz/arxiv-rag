@@ -255,6 +255,10 @@ oluştu (insan ve ölçüm değerlendirmesi). Düzeltmeler:
   arXiv çalışmaları adaylara eklenir; adaylar `0.6 × arama skoru + 0.4 × yıllık atıf skoru` ile yeniden sıralanır
   (yıllık atıf, yeni makalelerin ezilmemesi için). Servise ulaşılamazsa üretim atıf sinyali olmadan sürer ve
   raporda belirtilir. `S2_API_KEY` isteğe bağlıdır.
+- **Konu kapısı:** atıf sinyali konu kaymasına yol açtı (MoE taramasında "Attention Is All You Need" ve MMLU gibi
+  çok atıflı genel makaleler iki tema oluşturdu). Konu çapası (tohumlar ve aramanın ilk 10 sonucunun ortalama
+  vektörü) kurulur; kaynakçadan gelen makale ve atıf bonusu sadece ilgi skoru, aramada bulunan adayların alt
+  çeyreğinin (eksi 0,05) üstündeyse geçer.
 - **Survey sınırı:** en fazla 2 survey malzemeye girer, derin okunmaz; fazlası "İleri okuma" listesine gider.
 - **Küçük temalar:** 3 makaleden küçük kümeler anlamca en yakın kümeye katılır.
 - **Prompt:** yazım dili araştırma odağını belirlemez; açıklar sadece malzemenin söylediğinden türetilir;

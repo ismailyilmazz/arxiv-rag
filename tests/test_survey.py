@@ -200,21 +200,36 @@ def test_scholar_parses_batch_and_references(monkeypatch):
     assert scholar.references("2101.03961") == [{"id": "1701.06538", "citations": 3000, "year": 2017}]
 
 
-def test_citation_prior_reranks_and_references_expand(tmp_path, monkeypatch):
+def test_references_and_citations_only_count_when_on_topic(tmp_path, monkeypatch):
     _fake_llm(monkeypatch)
     conn, pipeline = _world(tmp_path)
     monkeypatch.setattr(scholar, "references", lambda pid, limit=200: [
-        {"id": B[4], "citations": 900, "year": 2020}, {"id": "0000.00000", "citations": 5, "year": 2020}])
-    monkeypatch.setattr(scholar, "batch", lambda ids: {pid: {"citations": 4000 if pid == B[3] else 1, "year": 2024}
+        {"id": A[5], "citations": 50, "year": 2020}, {"id": B[4], "citations": 90000, "year": 2017},
+        {"id": "0000.00000", "citations": 5, "year": 2020}])
+    monkeypatch.setattr(scholar, "batch", lambda ids: {pid: {"citations": 90000 if pid == B[4] else 1, "year": 2020}
                                                         for pid in ids})
+    monkeypatch.setattr(survey, "related", lambda conn, index, seeds, k=10: [])
     pipeline.search = lambda text, k=10: {"results": [{"id": pid, "score": 1.0} for pid in A[:4]], "accepted": True}
-    out = survey.build_broad(conn, connect(tmp_path / "c.db"), pipeline, "experts", seed_ids=[A[0]], n_sources=4,
+    out = survey.build_broad(conn, connect(tmp_path / "c.db"), pipeline, "experts", seed_ids=[A[0]], n_sources=5,
                              fetcher=lambda pid: fulltext.FullText(pid, "html", []))
-    assert out["scholar"]["reference_additions"] == 1 and B[4] in out["candidate_ids"]
+    s2 = out["scholar"]
+    assert A[5] in out["candidate_ids"] and B[4] not in out["candidate_ids"]
+    assert s2["reference_additions"] == 1 and s2["references_rejected"] == 1 and s2["relevance_threshold"] > 0.5
     assert "0000.00000" not in out["candidate_ids"]
+
+
+def test_citation_prior_reranks():
     scores = survey.rerank({"x": 1.0, "y": 0.5}, survey.citation_scores(
         {"x": {"citations": 1, "year": 2025}, "y": {"citations": 5000, "year": 2025}}, 2026))
     assert scores["y"] > scores["x"]
+
+
+def test_topical_relevance_threshold(tmp_path):
+    conn, pipeline = _world(tmp_path)
+    relevance, threshold = survey.topical_relevance(conn, pipeline.index, {pid: 1.0 for pid in A[:4]}, [A[0]],
+                                                    {A[5], B[0]})
+    assert relevance[A[5]] >= threshold > relevance[B[0]]
+    assert survey.topical_relevance(conn, pipeline.index, {}, []) == ({}, -1.0)
 
 
 def test_scholar_failure_does_not_stop_generation(tmp_path, monkeypatch):
