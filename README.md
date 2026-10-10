@@ -272,6 +272,16 @@ oluştu (insan ve ölçüm değerlendirmesi). Düzeltmeler:
   eklenerek kaynak sayısı hedefe tamamlanır (önceki çalıştırmada 30 kaynaktan 8'i kalmış, metin kısalmıştı).
 - **Kesilme:** bir bölüm token sınırında kesilirse model kaldığı yerden bir kez devam eder; plan bölümlerinin
   malzemesi sıkıştırıldı.
+- **Sonuçların repoya gönderilmesi:** Kaggle'da `GITHUB_TOKEN` secret'ı varsa (sadece bu repoya, sadece "Contents:
+  Read and write" yetkili fine-grained token) notebook 09 tam üretimden sonra `.md` ve `.json` dosyalarını
+  `eval/generations/` klasörüne kopyalayıp commit'ler ve push'lar (`scripts/publish_results.py`; uzak depo değiştiyse
+  önce rebase yapar, çıktılarda token maskelenir). Bundan sonra yerelde push'lamadan önce `git pull` gerekir.
+- **Bölüm bütünlüğü:** kabul çalıştırmasında bir karşılaştırma bölümü kesildi ve devam isteğinde model tabloyu baştan
+  yazdı (ölçüm). Her bölüm yazıldıktan sonra denetlenir: aynı başlıklı ikinci tablo görülürse metin oradan kesilir,
+  bölüm cümle ortasında bitiyorsa son tam cümleye kadar kırpılır. Belgede bozuk bölüm kalmaz.
+- **Önce İngilizce, sonra çeviri:** Türkçe öneri metni, prompt kurallarına rağmen üç kez "Türkçe" odağı uydurdu
+  (ölçüm: 19 geçiş). Türkçe belgeler artık önce İngilizce yazılır, sonra her bölüm atıflar, tablolar ve teknik
+  terimler korunarak çevrilir. Yazım dili araştırma odağına sızamaz.
 - **Kuru çalıştırma:** `--dry-run` (notebook'ta `DRY_RUN = True`) sadece kaynakları seçer ve temaları kurar, metin
   yazmaz; her temanın makalelerini ilgi skorlarıyla yazdırır. Maliyeti tek bir tema adlandırma isteğidir. Kota
   harcamadan önce kaynak seçimini doğrulamak için kullanılır.
@@ -286,6 +296,41 @@ oluştu (insan ve ölçüm değerlendirmesi). Düzeltmeler:
 
 Kapsama ölçümü notu: hakem seti sadece arXiv linki olan kaynaklardan çıkarılır, bu yüzden mutlak oranlar düşük
 görünür; anlamlı olan aynı hakemle önce/sonra karşılaştırmasıdır.
+
+## Adım 6b: API (FastAPI)
+
+Geniş akış ikiye ayrıldı: `core/survey.select_sources` (kaynak seçimi; JSON'a yazılabilir "seçim") ve
+`core/survey.write_from_selection` (seçimden yazım; çıkarılan kaynaklar ve ilerleme geri çağrısıyla). Kullanıcının
+gördüğü plan, yazılan metinle birebir aynıdır.
+
+| Uç nokta | Ne yapar |
+|---|---|
+| `GET /health` | Durum, kuyruk, sınırlar |
+| `POST /search` `{query, k}` | Arama akışı: sonuçlar (başlık, yazarlar, yıl, kategori, arXiv linki) ve bekçi kararı |
+| `POST /plan` `{topic, type, lang, seeds, focus, force}` | Kuru çalıştırma: temalar, 30 kaynak, ilgi skorları, ileri okuma; `plan_id` |
+| `POST /generate` `{plan_id, removed_ids}` | Arka plan işi başlatır; `job_id` ve kuyruktaki sıra |
+| `GET /jobs/{id}` | Durum (queued/running/done/failed), aşama (cards/sections/translate/verify), ilerleme |
+| `GET /jobs/{id}/download` | Üretilen .md |
+| `GET /jobs/{id}/report` | Üretim raporu (JSON) |
+
+- Tek işçi thread'i (Groq kotası model başına ortak). Sunucu yeniden başlarsa yarım işler "failed" olur.
+- İşler ve planlar `data/app.db` içinde, çıktılar `data/jobs/` altında.
+- Sınırlar: IP başına saatte 10 plan, günde 2 üretim; günlük toplam 5 üretim (`APP_PLANS_PER_IP_HOUR`,
+  `APP_GENERATIONS_PER_IP_DAY`, `APP_GENERATIONS_PER_DAY`). Bir proxy arkasında `APP_TRUST_PROXY=1`.
+- Diğer ayarlar: `APP_PAPERS_DB`, `APP_CACHE_DB`, `APP_DB`, `APP_VECTORS_DIR` (varsayılan `data/vectors_dev`),
+  `APP_MODELS_DIR` (varsayılan `data/models`), `APP_OUTPUT_DIR`, `APP_N_SOURCES`.
+- Bekleten çağrılar `async` olmayan uç noktalarda; arama ve plan paylaşılan bağlantıyı kilitle kullanır.
+
+Yerelde çalıştırma (30 binlik paketle; kalite değil mekanik test içindir):
+
+```
+pip install -r requirements.txt
+pip install sentence-transformers
+python -m scripts.import_bundle <yol>\local_bundle.zip
+uvicorn app.main:create_app --factory --port 8000
+```
+
+Tarayıcıda `http://127.0.0.1:8000/docs` adresi uç noktaları denemek için hazır bir arayüz sunar.
 
 ## Ölçümler
 

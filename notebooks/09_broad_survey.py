@@ -1,7 +1,7 @@
 # %%
 REPO_URL = "https://github.com/ismailyilmazz/arxiv-rag.git"
 DB = "/kaggle/working/papers_full.db"
-DRY_RUN = True
+DRY_RUN = False
 RUNS = [
     {"topic": "Mixture of experts for large language models", "type": "survey", "lang": "en",
      "seeds": ["1701.06538", "2101.03961", "2401.04088"], "gold": "2407.06204"},
@@ -27,6 +27,11 @@ try:
     print("Semantic Scholar: anahtarla")
 except Exception:
     print("Semantic Scholar: anahtarsız")
+try:
+    os.environ["GITHUB_TOKEN"] = secrets.get_secret("GITHUB_TOKEN")
+    print("GitHub: sonuçlar repoya gönderilecek")
+except Exception:
+    print("GitHub: token yok, sonuçlar sadece Output'ta kalacak")
 
 !git clone {REPO_URL} /kaggle/working/arxiv-rag
 %cd /kaggle/working/arxiv-rag
@@ -64,3 +69,4 @@ for run in RUNS:
 if not DRY_RUN:
     shutil.make_archive("/kaggle/working/generations", "zip", "/kaggle/working/generations")
     print("İndir: Output -> generations.zip", sorted(os.listdir("/kaggle/working/generations")))
+    !python -m scripts.publish_results --repo-dir /kaggle/working/arxiv-rag --source-dir /kaggle/working/generations

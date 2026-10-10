@@ -159,7 +159,7 @@ def test_proposal_uses_themes_as_related_work_and_writes_abstract_last(tmp_path,
     heads = _headings(out["markdown"])
     assert heads[0] == "## Özet" and heads[1] == "## Problem ve Motivasyon"
     assert any(h.startswith("## İlgili Çalışmalar: Theme") for h in heads) and "## Kaynakça" in heads
-    assert targets[-1] == "Özet" and out["doc_type"] == "proposal"
+    assert targets[-1] == "Abstract" and out["doc_type"] == "proposal"
     assert "## İleri okuma" in heads
 
 
@@ -400,3 +400,92 @@ def test_reference_with_topic_word_passes_second_gate(tmp_path, monkeypatch):
     s2 = out["scholar"]
     assert A[5] in out["candidate_ids"] and B[4] not in out["candidate_ids"]
     assert s2["references_by_term"] == 1 and s2["references_rejected"] == 1 and s2["topic_terms"] == ["expert"]
+
+
+def test_turkish_documents_are_written_in_english_then_translated(tmp_path, monkeypatch):
+    prompts = []
+    _fake_llm(monkeypatch)
+
+    def complete(prompt, model, max_tokens):
+        prompts.append(prompt)
+        if "Return only the title" in prompt:
+            return "Başlık", 1, "stop"
+        if prompt.startswith("Translate the following section"):
+            return "Çevrilmiş bölüm metni [1].", 1, "stop"
+        return "English section text [1].", 1, "stop"
+
+    monkeypatch.setattr(llm, "complete", complete)
+    conn, pipeline = _world(tmp_path)
+    out = survey.build_broad(conn, connect(tmp_path / "c.db"), pipeline, "experts", "proposal", lang="tr",
+                             n_sources=8, fetcher=lambda pid: fulltext.FullText(pid, "html", []))
+    writing = [p for p in prompts if "Now write:" in p]
+    translating = [p for p in prompts if p.startswith("Translate the following section")]
+    assert writing and all("in English, based only" in p for p in writing)
+    assert len(translating) == len(writing) and all("into Turkish" in p for p in translating)
+    md = out["markdown"]
+    assert "## Özet" in md and "## Problem ve Motivasyon" in md and "English section text" not in md
+    assert "Çevrilmiş bölüm metni" in md and out["citations"]["focus_drift"]["count"] == 0
+
+
+def test_english_documents_are_not_translated(tmp_path, monkeypatch):
+    prompts = []
+    _fake_llm(monkeypatch)
+    original = llm.complete
+    monkeypatch.setattr(llm, "complete", lambda prompt, model, max_tokens: (
+        prompts.append(prompt), original(prompt, model, max_tokens))[1])
+    conn, pipeline = _world(tmp_path)
+    survey.build_broad(conn, connect(tmp_path / "c.db"), pipeline, "experts", "synthesis", n_sources=8,
+                       fetcher=lambda pid: fulltext.FullText(pid, "html", []))
+    assert not any(p.startswith("Translate the following section") for p in prompts)
+
+
+def test_tidy_section_removes_restarted_table_and_trailing_fragment():
+    from core.writer import tidy_section
+    broken = ("Intro [1].\n\n| Work | Year |\n|---|---|\n| A [1] | 2017 |\n\nDiscussion [2]. Half sentence "
+              "| Work | Year |\n|---|---|\n| A [1] | 2017 |\n\nAnother half and")
+    out, changed = tidy_section(broken)
+    assert changed and out.count("| Work | Year |") == 1 and out.endswith("Discussion [2].")
+    assert tidy_section("Done [3].") == ("Done [3].", False)
+    assert tidy_section("| a | b |\n|---|---|\n| 1 | 2 |")[1] is False
+    assert tidy_section("- item without period")[1] is False
+
+
+def test_selection_survives_json_and_removed_sources_are_not_written(tmp_path, monkeypatch):
+    import json
+    _fake_llm(monkeypatch)
+    conn, pipeline = _world(tmp_path)
+    selection = survey.select_sources(conn, pipeline, "experts", "synthesis", seed_ids=[A[0]], n_sources=8)
+    selection = json.loads(json.dumps(selection))
+    view = survey.plan_view(selection)
+    assert view["dry_run"] and sum(t["size"] for t in view["themes"]) == view["screened"]
+    victim = next(pid for t in selection["themes"] for pid in t["ids"] if pid != A[0])
+    stages = []
+    out = survey.write_from_selection(conn, connect(tmp_path / "c.db"), selection, removed_ids=[victim],
+                                      fetcher=lambda pid: fulltext.FullText(pid, "html", []),
+                                      progress=lambda stage, done, total: stages.append((stage, done, total)))
+    assert victim not in out["screened_ids"] and victim not in out["cited"] and out["removed_ids"] == [victim]
+    assert out["screened"] == view["screened"] - 1
+    order = [s for s, _, _ in stages]
+    assert order[0] == "cards" and order[-1] == "verify"
+    last_section = [x for x in stages if x[0] == "sections"][-1]
+    assert last_section[1] == last_section[2] > 0
+
+
+def test_removing_every_source_is_an_error(tmp_path, monkeypatch):
+    _fake_llm(monkeypatch)
+    conn, pipeline = _world(tmp_path)
+    selection = survey.select_sources(conn, pipeline, "experts", n_sources=8)
+    everything = [pid for t in selection["themes"] for pid in t["ids"]]
+    with pytest.raises(ValueError, match="kaynak kalmadı"):
+        survey.write_from_selection(conn, connect(tmp_path / "c.db"), selection, removed_ids=everything)
+
+
+def test_force_uses_results_of_rejected_queries(tmp_path, monkeypatch):
+    _fake_llm(monkeypatch)
+    conn, pipeline = _world(tmp_path)
+    pipeline.search = lambda text, k=10: {"results": [{"id": pid, "score": 1.0} for pid in A[:5]],
+                                          "accepted": False}
+    with pytest.raises(ValueError, match="yeterli makale"):
+        survey.select_sources(conn, pipeline, "experts")
+    selection = survey.select_sources(conn, pipeline, "experts", force=True, n_sources=5)
+    assert selection["forced"] and selection["rejected_queries"] and set(A[:5]) <= set(selection["candidate_ids"])

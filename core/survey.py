@@ -43,13 +43,14 @@ def expand_queries(topic: str, model: str) -> tuple[list[str], int]:
 
 
 def collect(pipeline, queries: list[str], extra: list[str] = (), per_query: int = 20,
-            exclude: set = frozenset()) -> tuple[dict[str, float], list[str]]:
+            exclude: set = frozenset(), force: bool = False) -> tuple[dict[str, float], list[str]]:
     fused, rejected = {}, []
     for query in queries:
         out = pipeline.search(query, k=per_query)
         if not out["accepted"]:
             rejected.append(query)
-            continue
+            if not force:
+                continue
         for rank, r in enumerate(out["results"], start=1):
             if r["id"] not in exclude:
                 fused[r["id"]] = fused.get(r["id"], 0.0) + 1.0 / (60 + rank)
@@ -269,25 +270,21 @@ def pick_deep(themes: list[dict], ids: list[str], vectors: np.ndarray, seeds: li
     return deep
 
 
-def build_broad(conn: sqlite3.Connection, cache: sqlite3.Connection, pipeline, topic: str,
-                doc_type: str = "survey", seed_ids: list[str] = (), lang: str = "en", n_sources: int = 30,
-                max_deep: int = 6, exclude: tuple = (), card_model: Optional[str] = None,
-                write_model: Optional[str] = None, fetcher: Optional[Callable] = None, policy: Optional[str] = None,
-                focus: Optional[str] = None, use_scholar: bool = True, dry_run: bool = False) -> dict:
+def select_sources(conn: sqlite3.Connection, pipeline, topic: str, doc_type: str = "survey",
+                   seed_ids: list[str] = (), lang: str = "en", n_sources: int = 30, max_deep: int = 6,
+                   exclude: tuple = (), write_model: Optional[str] = None, focus: Optional[str] = None,
+                   use_scholar: bool = True, force: bool = False) -> dict:
     if doc_type not in writer.BROAD:
         raise ValueError(f"Bilinmeyen tür: {doc_type}. Seçenekler: {', '.join(writer.BROAD)}")
-    card_model = card_model or config.LLM_CARD_MODEL
     write_model = write_model or config.LLM_WRITE_MODEL
-    policy = policy or config.FULLTEXT_POLICY
     seeds = list(dict.fromkeys(normalize_id(s) for s in seed_ids))
     excluded = {normalize_id(e) for e in exclude}
     subject = f"{topic} (focus: {focus})" if focus else topic
-    cards.init_cache(cache)
     tokens, timings, start = {}, {}, time.perf_counter()
 
     queries, tokens["expand"] = expand_queries(subject, write_model)
     near = [r["id"] for r in related(conn, pipeline.index, seeds, k=10)] if seeds else []
-    fused, rejected = collect(pipeline, queries, near, exclude=excluded)
+    fused, rejected = collect(pipeline, queries, near, exclude=excluded, force=force)
     s2 = {"ok": False, "anchors": [], "reference_additions": 0, "references_rejected": 0, "with_citations": 0}
     refs, in_corpus = [], set()
     if use_scholar and fused:
@@ -341,69 +338,133 @@ def build_broad(conn: sqlite3.Connection, cache: sqlite3.Connection, pipeline, t
 
     kept = [pid for t in themes for pid in t["ids"]]
     kept_ids, kept_vectors = vectors_for(conn, pipeline.index, kept)
+    deep = pick_deep(themes, kept_ids, kept_vectors, seeds, max_deep, titles)
+    shown = kept + [p for p in dropped + moved if p not in kept]
+    return {
+        "version": 1, "topic": topic, "focus": focus, "doc_type": doc_type, "lang": lang, "subject": subject,
+        "seeds": seeds, "queries": queries, "rejected_queries": rejected, "forced": force, "scholar": s2,
+        "candidate_ids": list(fused), "off_topic_candidates": len(scores) - len(on_topic_scores),
+        "screened_ids": kept, "surveys_moved": moved, "dropped_by_themes": dropped, "backfilled": added,
+        "themes": [{"name": t["name"], "description": t.get("description", ""), "ids": t["ids"]} for t in themes],
+        "deep": deep, "relevance": {pid: round(relevance[pid], 4) for pid in shown if pid in relevance},
+        "titles": {pid: titles.get(pid, "") for pid in shown},
+        "tokens": tokens, "timings_ms": timings,
+    }
+
+
+def plan_view(selection: dict) -> dict:
+    rel, title = selection["relevance"].get, selection["titles"].get
+    tokens = {**selection["tokens"], "total": sum(selection["tokens"].values())}
+    return {
+        "dry_run": True, "topic": selection["topic"], "focus": selection["focus"],
+        "doc_type": selection["doc_type"], "lang": selection["lang"], "queries": selection["queries"],
+        "rejected_queries": selection["rejected_queries"], "forced": selection.get("forced", False),
+        "scholar": selection["scholar"], "candidates": len(selection["candidate_ids"]),
+        "off_topic_candidates": selection["off_topic_candidates"], "screened": len(selection["screened_ids"]),
+        "surveys_moved": selection["surveys_moved"], "backfilled": selection["backfilled"],
+        "candidate_ids": selection["candidate_ids"], "screened_ids": selection["screened_ids"],
+        "cited": [], "deep": selection["deep"],
+        "themes": [{"name": t["name"], "size": len(t["ids"]),
+                    "papers": [{"id": pid, "title": title(pid, ""), "relevance": rel(pid),
+                                "deep": pid in selection["deep"]} for pid in t["ids"]]}
+                   for t in selection["themes"]],
+        "dropped_by_themes": [{"id": pid, "title": title(pid, ""), "relevance": rel(pid)}
+                              for pid in selection["dropped_by_themes"]],
+        "further_reading": [{"id": pid, "title": title(pid, "")} for pid in selection["surveys_moved"]],
+        "tokens": tokens, "timings_ms": selection["timings_ms"],
+    }
+
+
+def write_from_selection(conn: sqlite3.Connection, cache: sqlite3.Connection, selection: dict,
+                         removed_ids: tuple = (), card_model: Optional[str] = None,
+                         write_model: Optional[str] = None, fetcher: Optional[Callable] = None,
+                         policy: Optional[str] = None, progress: Optional[Callable] = None) -> dict:
+    card_model = card_model or config.LLM_CARD_MODEL
+    write_model = write_model or config.LLM_WRITE_MODEL
+    policy = policy or config.FULLTEXT_POLICY
+    progress = progress or (lambda stage, done, total: None)
+    cards.init_cache(cache)
+    start = time.perf_counter()
+    doc_type, lang, topic, focus = selection["doc_type"], selection["lang"], selection["topic"], selection["focus"]
+    removed = {normalize_id(r) for r in removed_ids}
+    themes = [{**t, "ids": [p for p in t["ids"] if p not in removed]} for t in selection["themes"]]
+    themes = [t for t in themes if t["ids"]]
+    kept = [pid for t in themes for pid in t["ids"]]
+    if not kept:
+        raise ValueError("Bütün kaynaklar çıkarıldı; yazılacak kaynak kalmadı.")
+    deep = [d for d in selection["deep"] if d in kept]
+    moved = [m for m in selection["surveys_moved"] if m not in removed]
     wanted = kept + [m for m in moved if m not in kept]
     meta = {r[0]: {"title": r[1], "abstract": r[2], "authors": r[3], "published": r[4], "license": r[5]}
             for r in conn.execute(f"SELECT id, title, abstract, authors, published, license FROM papers "
                                   f"WHERE id IN ({','.join('?' * len(wanted))})", wanted)}
-    deep = pick_deep(themes, kept_ids, kept_vectors, seeds, max_deep, titles)
-    if dry_run:
-        rel = lambda pid: round(relevance[pid], 4) if pid in relevance else None
-        return {
-            "dry_run": True, "topic": topic, "focus": focus, "doc_type": doc_type, "lang": lang, "queries": queries,
-            "rejected_queries": rejected, "scholar": s2, "candidates": len(fused),
-            "off_topic_candidates": len(scores) - len(on_topic_scores), "screened": len(kept),
-            "surveys_moved": moved, "backfilled": added, "candidate_ids": list(fused), "screened_ids": kept,
-            "cited": [], "deep": deep,
-            "themes": [{"name": t["name"], "size": len(t["ids"]),
-                        "papers": [{"id": pid, "title": titles.get(pid, ""), "relevance": rel(pid),
-                                    "deep": pid in deep} for pid in t["ids"]]} for t in themes],
-            "dropped_by_themes": [{"id": pid, "title": titles.get(pid, ""), "relevance": rel(pid)} for pid in dropped],
-            "tokens": tokens, "timings_ms": {"total_ms": round((time.perf_counter() - start) * 1000)},
-        }
-    sources, number = [], {}
+    tokens, timings = dict(selection["tokens"]), dict(selection["timings_ms"])
+
+    sources = []
     for pid in deep + [p for p in kept if p not in deep]:
-        number[pid] = len(sources) + 1
-        sources.append({"n": number[pid], "id": pid, **meta[pid],
+        sources.append({"n": len(sources) + 1, "id": pid, **meta[pid],
                         "theme": next((t["name"] for t in themes if pid in t["ids"]), "")})
-    tokens["cards"], t_cards = 0, time.perf_counter()
+    tokens["cards"], t_cards, done = 0, time.perf_counter(), 0
+    progress("cards", 0, len(deep))
     for s in sources:
         if s["id"] in deep:
             card, info = cards.get_card(cache, {"id": s["id"], **meta[s["id"]]}, card_model, policy=policy,
                                         fetcher=fetcher)
             s["card"] = card
             tokens["cards"] += info["tokens"]
+            done += 1
+            progress("cards", done, len(deep))
         else:
             s["key_sentences"] = key_sentences(meta[s["id"]]["abstract"])
     timings["cards_ms"] = round((time.perf_counter() - t_cards) * 1000)
 
     t_write = time.perf_counter()
-    draft, tokens["write"], sections = writer.write_broad(doc_type, sources, themes, subject, lang, write_model)
+    draft, tokens["write"], sections = writer.write_broad(doc_type, sources, themes, selection["subject"], lang,
+                                                          write_model, progress=progress)
     timings["write_ms"] = round((time.perf_counter() - t_write) * 1000)
 
+    progress("verify", 0, 1)
     body, report = citations.check_and_fix(draft, len(sources), tuple(writer.broad_uncited_allowed(doc_type, lang)))
     body, mapping = citations.renumber(body)
     for s in sources:
         s["n_old"], s["n"] = s["n"], mapping.get(s["n"])
     cited = sorted([s for s in sources if s["n"]], key=lambda s: s["n"])
     further = [s for s in sources if not s["n"]] + [{"id": m, **meta[m]} for m in moved if m in meta]
-    report["name_mismatches"] = citations.name_mismatches(body, cited, [titles[p] for p in kept if p in titles])
+    report["name_mismatches"] = citations.name_mismatches(body, cited, [meta[p]["title"] for p in kept])
     report["focus_drift"] = citations.focus_drift(body, topic, focus)
     report["meta_language"] = citations.meta_language(body)
     report["number_audit"] = citations.number_audit(body, {s["n"]: material_text(s) for s in cited})
     markdown = body.rstrip() + "\n\n" + citations.bibliography(cited, lang) + "\n" + \
         citations.further_reading(further, lang)
+    progress("verify", 1, 1)
     tokens["total"] = sum(tokens.values())
-    timings["total_ms"] = round((time.perf_counter() - start) * 1000)
+    timings["total_ms"] = timings.get("retrieval_ms", 0) + round((time.perf_counter() - start) * 1000)
     return {
         "markdown": markdown, "topic": topic, "focus": focus, "doc_type": doc_type, "lang": lang,
-        "queries": queries, "rejected_queries": rejected, "scholar": s2,
-        "candidates": len(fused), "off_topic_candidates": len(scores) - len(on_topic_scores),
-        "screened": len(kept), "surveys_moved": moved, "dropped_by_themes": dropped, "backfilled": added,
-        "candidate_ids": list(fused), "screened_ids": kept,
-        "relevance": {pid: round(relevance[pid], 4) for pid in kept + dropped if pid in relevance},
+        "queries": selection["queries"], "rejected_queries": selection["rejected_queries"],
+        "scholar": selection["scholar"], "candidates": len(selection["candidate_ids"]),
+        "off_topic_candidates": selection["off_topic_candidates"], "screened": len(kept),
+        "surveys_moved": moved, "dropped_by_themes": selection["dropped_by_themes"],
+        "backfilled": selection["backfilled"], "removed_ids": sorted(removed),
+        "candidate_ids": selection["candidate_ids"], "screened_ids": kept,
+        "relevance": {pid: v for pid, v in selection["relevance"].items() if pid in kept},
         "themes": [{"name": t["name"], "size": len(t["ids"]),
                     "deep": [pid for pid in t["ids"] if pid in deep]} for t in themes],
         "deep": deep, "cited": [s["id"] for s in cited], "further_reading": [s["id"] for s in further],
         "citations": report, "sections": sections, "tokens": tokens, "timings_ms": timings,
         "length": {"words": len(body.split()), "truncated": any(r["truncated"] for r in sections)},
     }
+
+
+def build_broad(conn: sqlite3.Connection, cache: sqlite3.Connection, pipeline, topic: str,
+                doc_type: str = "survey", seed_ids: list[str] = (), lang: str = "en", n_sources: int = 30,
+                max_deep: int = 6, exclude: tuple = (), card_model: Optional[str] = None,
+                write_model: Optional[str] = None, fetcher: Optional[Callable] = None, policy: Optional[str] = None,
+                focus: Optional[str] = None, use_scholar: bool = True, dry_run: bool = False,
+                force: bool = False) -> dict:
+    selection = select_sources(conn, pipeline, topic, doc_type, seed_ids, lang, n_sources, max_deep, exclude,
+                               write_model, focus, use_scholar, force)
+    if dry_run:
+        return plan_view(selection)
+    return write_from_selection(conn, cache, selection, card_model=card_model, write_model=write_model,
+                                fetcher=fetcher, policy=policy)

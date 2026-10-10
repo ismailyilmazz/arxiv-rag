@@ -1,5 +1,6 @@
 import json
 import re
+import threading
 import time
 from collections import defaultdict, deque
 from functools import lru_cache
@@ -11,6 +12,7 @@ from core import config
 
 
 _WINDOW: dict[str, deque] = defaultdict(deque)
+_WINDOW_LOCK = threading.Lock()
 
 
 def reserve(model: str, tokens: int) -> float:
@@ -19,19 +21,21 @@ def reserve(model: str, tokens: int) -> float:
         return 0.0
     tokens, waited = min(tokens, limit), 0.0
     while True:
-        now = time.monotonic()
-        window = _WINDOW[model]
-        while window and now - window[0][0] >= 60:
-            window.popleft()
-        if sum(t for _, t in window) + tokens <= limit:
-            return waited
-        pause = max(0.5, 60 - (now - window[0][0]))
+        with _WINDOW_LOCK:
+            now = time.monotonic()
+            window = _WINDOW[model]
+            while window and now - window[0][0] >= 60:
+                window.popleft()
+            if sum(t for _, t in window) + tokens <= limit:
+                return waited
+            pause = max(0.5, 60 - (now - window[0][0]))
         time.sleep(pause)
         waited += pause
 
 
 def record(model: str, tokens: int) -> None:
-    _WINDOW[model].append((time.monotonic(), tokens))
+    with _WINDOW_LOCK:
+        _WINDOW[model].append((time.monotonic(), tokens))
 
 
 @lru_cache(maxsize=1)

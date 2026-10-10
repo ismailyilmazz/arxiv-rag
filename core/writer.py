@@ -158,7 +158,47 @@ def material_for(spec: dict, sources: list[dict], written: list[tuple[str, str]]
 
 
 CONTINUE = ("\n\nThe section you are writing currently ends with:\n{tail}\n\nContinue exactly from where it stops. "
-            "Do not repeat earlier text. Finish the section with complete sentences.")
+            "Do not repeat earlier text, do not start a new table and do not repeat headings. Finish the section "
+            "with complete sentences.")
+
+TRANSLATE_PROMPT = """Translate the following section of a {label} from English into {language}.
+- Keep every citation such as [3] or [1, 4] exactly as it is and where it is.
+- Keep the markdown formatting (tables, bold text, lists) unchanged.
+- Keep paper titles, model names and standard technical terms in English.
+- Write natural, fluent {language}; in Turkish every sentence ends with its predicate.
+- Do not add, remove or summarize content. Return only the translated section.
+
+Section:
+{text}"""
+
+_SEPARATOR = re.compile(r"^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$")
+_TERMINAL = re.compile(r"[.!?\])\"'\u201d]\s*$")
+
+
+def _cells(line: str) -> tuple:
+    return tuple(c.strip().lower() for c in line[line.index("|"):].strip().strip("|").split("|"))
+
+
+def tidy_section(text: str) -> tuple[str, bool]:
+    lines, seen, cut = text.rstrip().splitlines(), set(), None
+    for i in range(1, len(lines)):
+        if _SEPARATOR.match(lines[i]) and "|" in lines[i - 1]:
+            header = _cells(lines[i - 1])
+            if header in seen:
+                cut = i - 1
+                break
+            seen.add(header)
+    changed = cut is not None
+    if changed:
+        head = lines[cut][:lines[cut].index("|")].rstrip()
+        lines = lines[:cut] + ([head] if head else [])
+    body = "\n".join(lines).rstrip()
+    last = body.splitlines()[-1].strip() if body else ""
+    if last and not last.startswith(("|", "-", "*", "#")) and not re.match(r"\d+\.", last) and not _TERMINAL.search(last):
+        ends = [m.end() for m in re.finditer(r"[.!?](\s*\[[\d,\s\u2013-]+\])?[.]?(?=\s|$)", body)]
+        if ends:
+            body, changed = body[:ends[-1]].rstrip(), True
+    return body, changed
 
 
 def _call(prompt: str, model: str, max_tokens: int) -> tuple[str, int, bool]:
@@ -340,32 +380,49 @@ def broad_material(kind: str, sources: list[dict], themes: list[dict], written: 
 
 
 def write_broad(doc_type: str, sources: list[dict], themes: list[dict], topic: str, lang: str,
-                model: str) -> tuple[str, int, list[dict]]:
-    spec, language, n = BROAD[doc_type], LANGUAGES[lang], len(sources)
+                model: str, progress=None) -> tuple[str, int, list[dict]]:
+    progress = progress or (lambda stage, done, total: None)
+    spec, n = BROAD[doc_type], len(sources)
     label = f"{spec['label']} on {topic}"
     plan = []
     for sec in spec["sections"]:
         if sec == THEMES:
-            plan += [{"key": f"theme:{t['name']}", "heading": spec["theme_prefix"][lang] + t["name"], "kind": "theme",
-                      "task": spec["theme_task"], "tokens": 2500, "last": False, "theme": t} for t in themes]
+            plan += [{"key": f"theme:{t['name']}", "kind": "theme", "task": spec["theme_task"], "tokens": 2500,
+                      "last": False, "theme": t, "heading": spec["theme_prefix"]["en"] + t["name"],
+                      "heading_out": spec["theme_prefix"][lang] + t["name"]} for t in themes]
         else:
-            plan.append({**sec, "heading": sec["title"][lang], "theme": None})
+            plan.append({**sec, "theme": None, "heading": sec["title"]["en"], "heading_out": sec["title"][lang]})
     outline = "\n".join(f"## {p['heading']}" for p in plan)
     texts, written, report, used = {}, [], [], 0
+    progress("sections", 0, len(plan))
     for item in [p for p in plan if not p["last"]] + [p for p in plan if p["last"]]:
         prompt = SECTION_PROMPT.format(
-            label=label, language=language, outline=outline, written=summary_of(written),
+            label=label, language="English", outline=outline, written=summary_of(written),
             target=f'the section "{item["heading"]}"', task=item["task"].format(n=n, k=len(themes)),
             context_rule="", material=broad_material(item["kind"], sources, themes, written, item["theme"]),
             style=STYLE, n=n, extra=BROAD_RULES.format(topic=topic))
         text, tokens, truncated = _call(prompt, model, item["tokens"])
+        text, tidied = tidy_section(text.strip())
         used += tokens
-        report.append({"section": item["key"], "source": None, "tokens": tokens, "truncated": truncated})
-        texts[item["heading"]] = text.strip()
-        written.append((item["heading"], texts[item["heading"]]))
-    title, tokens, _ = _call(TITLE_PROMPT.format(language=language, label=label, written=summary_of(written)),
+        report.append({"section": item["key"], "source": None, "tokens": tokens, "truncated": truncated,
+                       "tidied": tidied})
+        texts[item["key"]] = text
+        written.append((item["heading"], text))
+        progress("sections", len(written), len(plan))
+    if lang != "en":
+        progress("translate", 0, len(plan))
+        for done, item in enumerate(plan, start=1):
+            prompt = TRANSLATE_PROMPT.format(label=label, language=LANGUAGES[lang], text=texts[item["key"]])
+            text, tokens, truncated = _call(prompt, model, 4000)
+            text, tidied = tidy_section(text.strip())
+            used += tokens
+            report.append({"section": f"translate:{item['key']}", "source": None, "tokens": tokens,
+                           "truncated": truncated, "tidied": tidied})
+            texts[item["key"]] = text
+            progress("translate", done, len(plan))
+    title, tokens, _ = _call(TITLE_PROMPT.format(language=LANGUAGES[lang], label=label, written=summary_of(written)),
                              model, 300)
     used += tokens
     title = title.strip().strip('"').strip("#").strip() or topic
-    body = "\n\n".join(f"## {p['heading']}\n\n{texts[p['heading']]}" for p in plan)
+    body = "\n\n".join(f"## {p['heading_out']}\n\n{texts[p['key']]}" for p in plan)
     return f"# {title}\n\n{body}\n", used, report

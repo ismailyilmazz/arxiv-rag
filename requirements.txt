@@ -8,3 +8,6 @@ nltk==3.10.3
 lightgbm==4.7.0
 beautifulsoup4==4.14.3
 pypdf==5.9.0
+fastapi==0.143.0
+uvicorn==0.54.0
+httpx==0.28.1
