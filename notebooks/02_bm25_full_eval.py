@@ -14,7 +14,7 @@ CORPUS = corpus[0]
 print(CORPUS)
 
 # %%
-!python -m scripts.load_sqlite {CORPUS} --db /kaggle/working/papers_full.db
+!python -m scripts.data.load_sqlite {CORPUS} --db /kaggle/working/papers_full.db
 
 # %%
-!python -m scripts.evaluate --method bm25 --db /kaggle/working/papers_full.db
+!python -m scripts.evaluation.evaluate --method bm25 --db /kaggle/working/papers_full.db

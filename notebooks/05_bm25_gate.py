@@ -25,12 +25,12 @@ print(dbs[0])
 print(VEC, MODEL)
 
 # %%
-!python -m scripts.build_term_df --db {DB}
+!python -m scripts.data.build_term_df --db {DB}
 
 # %%
 for m in METHODS:
     extra = "" if m.startswith("bm25") else f"--vectors-dir {VEC}"
-    !python -m scripts.evaluate --method {m} --db {DB} {extra}
+    !python -m scripts.evaluation.evaluate --method {m} --db {DB} {extra}
 
 # %%
 N = sqlite3.connect(DB).execute("SELECT COUNT(*) FROM papers").fetchone()[0]

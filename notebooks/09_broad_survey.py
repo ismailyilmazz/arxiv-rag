@@ -64,9 +64,9 @@ for run in RUNS:
 flag = "--dry-run" if DRY_RUN else ""
 for run in RUNS:
     seeds, topic, gold, kind, lang = " ".join(run["seeds"]), run["topic"], run["gold"], run["type"], run["lang"]
-    !python -m scripts.generate_broad --topic "{topic}" --type {kind} --lang {lang} --seeds {seeds} --gold-survey {gold} --db {DB} --vectors-dir {VEC} --models-dir {MODELS} --cache-db /kaggle/working/cache.db --out-dir /kaggle/working/generations {flag}
+    !python -m scripts.generation.generate --topic "{topic}" --type {kind} --lang {lang} --seeds {seeds} --gold-survey {gold} --db {DB} --vectors-dir {VEC} --models-dir {MODELS} --cache-db /kaggle/working/cache.db --out-dir /kaggle/working/generations {flag}
 
 if not DRY_RUN:
     shutil.make_archive("/kaggle/working/generations", "zip", "/kaggle/working/generations")
     print("İndir: Output -> generations.zip", sorted(os.listdir("/kaggle/working/generations")))
-    !python -m scripts.publish_results --repo-dir /kaggle/working/arxiv-rag --source-dir /kaggle/working/generations
+    !python -m scripts.generation.publish_results --repo-dir /kaggle/working/arxiv-rag --source-dir /kaggle/working/generations

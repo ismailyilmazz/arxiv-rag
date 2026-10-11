@@ -21,15 +21,15 @@ assert torch.cuda.is_available(), "GPU kapalı. Settings > Accelerator: GPU T4 x
 print(torch.cuda.get_device_name(0))
 
 # %%
-!python -m scripts.load_sqlite {CORPUS} --db {DB}
+!python -m scripts.data.load_sqlite {CORPUS} --db {DB}
 
 # %%
-!python -m scripts.make_subset --db {DB} --size {SUBSET_SIZE} --out /kaggle/working/subset_pks.npy
+!python -m scripts.data.make_subset --db {DB} --size {SUBSET_SIZE} --out /kaggle/working/subset_pks.npy
 
 # %%
 for m in MODELS:
-    !python -m scripts.embed --model {m} --db {DB} --pks /kaggle/working/subset_pks.npy --out-dir /kaggle/working/vectors_subset_{m}
-    !python -m scripts.evaluate --method dense --db {DB} --vectors-dir /kaggle/working/vectors_subset_{m}
+    !python -m scripts.data.embed --model {m} --db {DB} --pks /kaggle/working/subset_pks.npy --out-dir /kaggle/working/vectors_subset_{m}
+    !python -m scripts.evaluation.evaluate --method dense --db {DB} --vectors-dir /kaggle/working/vectors_subset_{m}
 
 # %%
 import json

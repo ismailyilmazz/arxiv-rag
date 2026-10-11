@@ -43,11 +43,11 @@ print(VEC)
 print(MODELS)
 
 # %%
-!python -m scripts.evaluate --method pipeline --db {DB} --vectors-dir {VEC} --models-dir {MODELS}
+!python -m scripts.evaluation.evaluate --method pipeline --db {DB} --vectors-dir {VEC} --models-dir {MODELS}
 
 # %%
-from core.db import connect
-from core.pipeline import SearchPipeline
+from arxiv_rag.storage.db import connect
+from arxiv_rag.search.pipeline import SearchPipeline
 
 conn = connect(DB)
 pipe = SearchPipeline.load(conn, VEC, MODELS)

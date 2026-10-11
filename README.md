@@ -1,18 +1,43 @@
 # arXiv Araştırma Asistanı
 
-Kullanıcı bir konu yazar (Türkçe veya İngilizce). Sistem arXiv'deki ilgili makaleleri bulur,
-kullanıcı içlerinden seçim yapar, LLM seçilen makalelere atıf yapan özgün bir araştırma
-kağıdı taslağı üretir. Makale linkleri arXiv'in özet sayfasına yönlendirir.
+Kullanıcı bir konu yazar (Türkçe veya İngilizce). Sistem 3,18 milyon arXiv makalesi içinde anlamsal arama,
+BM25, öğrenen sıralayıcı ve bekçi modeliyle ilgili makaleleri bulur; Semantic Scholar kaynakçası ve konu
+kapısıyla 30 kaynak seçer, bunları K-Means ile temalara ayırır ve seçilen türde (literatür taraması, araştırma
+önerisi, sentez raporu) atıflı, linkli bir metin üretir. Her iddia `[n]` ile kaynağına bağlanır; kaynakça ve
+"İleri okuma" listesi arXiv sayfalarına yönlendirir.
 
-## Klasör yapısı
+## Mimari
 
 ```
-core/          ortak kod: ayarlar, arXiv kimlikleri, veritabanı, arama, metrikler
-scripts/       komut satırından çalışan işler (yükleme, değerlendirme)
-notebooks/     Kaggle'da çalışan ağır işler (korpus, tam korpus ölçümü)
-eval/          değerlendirme seti ve ölçüm raporları
-tests/         birim testleri
-data/          veriler (repoya girmez)
+Konu ─► /api/search ─► anlamsal + BM25 adaylar ─► özellikler ─► LightGBM sıralayıcı ─► bekçi
+   └──► /api/plans (kuyruk) ─► alt sorgular ─► arama + Semantic Scholar ─► konu kapısı ─► 30 kaynak
+                                ─► K-Means temalar ─► derin kaynaklar          (kuru çalıştırma = plan)
+   └──► /api/documents (kuyruk) ─► okuma kartları ─► bölüm bölüm yazım (tr: önce İngilizce, sonra çeviri)
+                                ─► bölüm denetimi ─► atıf doğrulama ─► .md + rapor
+```
+
+## Proje yapısı
+
+```
+arxiv_rag/                 Python paketi
+  config.py                ayarlar (.env)
+  storage/                 veri katmanı: SQLite + FTS5 (db), arXiv kimlikleri, train/test bölmesi
+  search/                  BM25, anlamsal dizin, kodlayıcı, dil ve alan tanıma, özellikler, arama akışı,
+                           yakın makaleler, RRF karşılaştırma tabanı (hybrid)
+  generation/              LLM istemcisi, tam metin, okuma kartları, yazım, atıf doğrulama,
+                           Semantic Scholar, belge akışı (document: kaynak seçimi + yazım)
+  evaluation/              metrikler (hit@k, MRR), hakem survey'e karşı kapsama
+  api/                     FastAPI: uç noktalar, şemalar, ayarlar, iş deposu, işçi thread'leri
+scripts/                   komut satırı işleri
+  data/                    korpus yükleme, alt küme, vektör üretimi/birleştirme, term_df, yerel paket
+  training/                eğitim sorguları, alan sınıflandırıcısı, özellikler, sıralayıcı, bekçi
+  evaluation/              değerlendirme seti, yöntem karşılaştırması
+  generation/              belge üretimi (komut satırı), Kaggle sonuçlarını repoya gönderme
+notebooks/                 Kaggle'da çalışan ağır işler (01-09); dizin: notebooks/README.md
+tests/                     paketle aynı düzende birim testleri (storage, search, generation, ...)
+eval/                      değerlendirme seti, ölçüm raporları, üretim örnekleri
+train/                     LLM ile üretilmiş eğitim sorguları
+data/                      yerel veriler (repoya girmez)
 ```
 
 ## Kurulum (Windows)
@@ -20,9 +45,11 @@ data/          veriler (repoya girmez)
 ```
 python -m venv venv
 venv\Scripts\activate
-pip install -r requirements.txt
+pip install -e ".[dev]"
 pytest
 ```
+
+API'yi yerelde çalıştırmak için ayrıca `pip install -e ".[embed]"` (sentence-transformers) gerekir.
 
 Proje kökünde bir `.env` dosyası oluştur:
 
@@ -36,7 +63,28 @@ HF_REPO_ID=
 ARXIV_CONTACT_EMAIL=
 ```
 
-## Adım 1: Korpus
+İsteğe bağlı: `LLM_CARD_MODEL`, `LLM_WRITE_MODEL`, `FULLTEXT_POLICY` (`all`/`cc`), `LLM_TPM`, `S2_API_KEY`.
+
+## Kullanım
+
+API ve (derlenmişse) arayüz:
+
+```
+uvicorn arxiv_rag.api.app:create_app --factory --port 8000
+```
+
+Komut satırından belge üretimi (tam korpus gerekir; Kaggle'da `notebooks/09_broad_survey.py`):
+
+```
+python -m scripts.generation.generate --topic "Mixture of experts for large language models" --type survey \
+    --seeds 1701.06538 2101.03961 2401.04088 --dry-run
+```
+
+## Geliştirme süreci
+
+Her adımın sonunda çalışan ve ölçülmüş bir şey vardır; ölçümler `eval/results/` altında.
+
+### Adım 1: Korpus
 
 1. Kaggle'da yeni bir notebook aç, "Add Input" ile `Cornell-University/arxiv` veri setini ekle.
 2. `notebooks/01_build_corpus.py` içeriğini yapıştır ve çalıştır, ardından "Save Version" ile kaydet.
@@ -44,36 +92,36 @@ ARXIV_CONTACT_EMAIL=
 4. Yerel veritabanını oluştur:
 
 ```
-python -m scripts.load_sqlite data/dev_sample.parquet
+python -m scripts.data.load_sqlite data/dev_sample.parquet
 ```
 
-## Adım 2: Değerlendirme seti ve BM25
+### Adım 2: Değerlendirme seti ve BM25
 
 ```
-python -m scripts.build_eval_set
-python -m scripts.evaluate --method bm25
+python -m scripts.evaluation.build_eval_set
+python -m scripts.evaluation.evaluate --method bm25
 ```
 
 Tam korpus ölçümü Kaggle'da yapılır: `notebooks/02_bm25_full_eval.py`.
 Raporlar `eval/results/` klasörüne yazılır.
 
-## Adım 3: Anlamsal arama
+### Adım 3: Anlamsal arama
 
 Model seçimi Kaggle'da GPU ile yapılır: `notebooks/03_model_selection.py`.
 Seçilen modelle tam korpusun vektörleri iki GPU'da üretilir: `notebooks/04_full_embedding.py`.
 
 ```
-python -m scripts.evaluate --method dense --vectors-dir <vektör klasörü>
-python -m scripts.evaluate --method hybrid --vectors-dir <vektör klasörü>
-python -m scripts.build_term_df
-python -m scripts.evaluate --method bm25-gate
+python -m scripts.evaluation.evaluate --method dense --vectors-dir <vektör klasörü>
+python -m scripts.evaluation.evaluate --method hybrid --vectors-dir <vektör klasörü>
+python -m scripts.data.build_term_df
+python -m scripts.evaluation.evaluate --method bm25-gate
 ```
 
 `bm25-gate`, aramayı sorgudaki en nadir iki kelimeden birini içeren makalelerle sınırlar,
 sıralamayı bütün kelimelerle yapar. Kelimelerin ne kadar yaygın olduğu `term_df` tablosundan okunur.
 Tam korpus ölçümü: `notebooks/05_bm25_gate.py`.
 
-## Adım 4a: Eğitim verisi
+### Adım 4a: Eğitim verisi
 
 Sıralayıcı ve bekçi için eğitim sorguları Groq ile üretilir. Makaleler sadece eğitim havuzundan
 seçilir, değerlendirme setindeki makaleler hariç tutulur. Her makale için üç sorgu: İngilizce,
@@ -81,37 +129,37 @@ Türkçe ve Türkçe ile İngilizce terimlerin karıştığı "mühendis ağzı"
 kullanılır, bir modelin günlük kotası dolunca diğerleriyle devam edilir, kesilen iş kaldığı yerden sürer.
 
 ```
-python -m scripts.gen_train_queries --n-papers 3 --n-offtopic 0
-python -m scripts.gen_train_queries
+python -m scripts.training.gen_train_queries --n-papers 3 --n-offtopic 0
+python -m scripts.training.gen_train_queries
 ```
 
 Çıktılar `train/queries.jsonl` ve `train/offtopic.jsonl` (git'e girer). Modeller `.env` içindeki
 `LLM_GEN_MODELS` satırından okunur.
 
-## Adım 4b: Sınıflandırıcı, sıralayıcı ve bekçi
+### Adım 4b: Sınıflandırıcı, sıralayıcı ve bekçi
 
 Kaggle'da çalışır: `notebooks/06_train_models.py` (girdiler: 04 vektörler, 05 term_df'li veritabanı).
 
-- `scripts/train_field_classifier.py`: granite vektörleri üzerinde lojistik regresyon, yaklaşık 16 ana alan.
+- `scripts/training/train_field_classifier.py`: granite vektörleri üzerinde lojistik regresyon, yaklaşık 16 ana alan.
   Rakibi TF-IDF. Test: 2026 makaleleri ve değerlendirme sorguları (İngilizce, Türkçe ayrı).
-- `scripts/build_features.py`: her sorgu için aday havuzu (anlamsal ilk 100 ∪ kapılı BM25 ilk 100)
-  ve özellikler. Aynı kod (`core/features.py`) eğitimde, değerlendirmede ve sunucuda kullanılır.
-- `scripts/train_ranker.py`: LightGBM LambdaRank. Rakibi aynı aday havuzunda tek başına anlamsal arama.
+- `scripts/training/build_features.py`: her sorgu için aday havuzu (anlamsal ilk 100 ∪ kapılı BM25 ilk 100)
+  ve özellikler. Aynı kod (`arxiv_rag/search/features.py`) eğitimde, değerlendirmede ve sunucuda kullanılır.
+- `scripts/training/train_ranker.py`: LightGBM LambdaRank. Rakibi aynı aday havuzunda tek başına anlamsal arama.
   Doğrulama için eğitim makalelerinin %15'i makale bazında ayrılır.
-- `scripts/train_guard.py`: lojistik regresyon. Eşik, gerçek sorguların en fazla %5'ini reddedecek şekilde
+- `scripts/training/train_guard.py`: lojistik regresyon. Eşik, gerçek sorguların en fazla %5'ini reddedecek şekilde
   eğitim verisinden seçilir. Rakibi aynı kuralla en iyi anlamsal skora konan eşik.
 
 Not: Nadir kelime kapısı artık sözlükte bulunan kelime sayısı 4'ten azsa kurulmuyor (Türkçe sorgulardaki
 fazla sıkılığın düzeltmesi). `bm25-gate` sonucu 06 notebook'unda yeniden ölçülür.
 
-## Adım 4c: Arama akışı
+### Adım 4c: Arama akışı
 
-`core/pipeline.py` içindeki `SearchPipeline`, bir sorguyu uçtan uca işler: anlamsal arama ve kapılı BM25
+`arxiv_rag/search/pipeline.py` içindeki `SearchPipeline`, bir sorguyu uçtan uca işler: anlamsal arama ve kapılı BM25
 ile aday havuzu, özellikler, sıralayıcı ve bekçi. Çıktı: ilk k makale, "kaynak yeterli mi" kararı ve
 aşama süreleri. Tam korpus ölçümü (CPU): `notebooks/07_pipeline.py`.
 
 ```
-python -m scripts.evaluate --method pipeline --vectors-dir <vektörler> --models-dir <modeller>
+python -m scripts.evaluation.evaluate --method pipeline --vectors-dir <vektörler> --models-dir <modeller>
 ```
 
 Kabul kriteri: canlı akışın değerlendirme sonucu, Adım 4b'deki çevrimdışı sıralayıcı sonucuyla aynı olmalı.
@@ -125,33 +173,30 @@ konu dışı sorularda İngilizce %2, Türkçe %6. Türkçe gerçek sorgular dah
 Aşamaların ortanca süresi (ms, ikinci çalıştırma): kodlama 176, anlamsal arama 251, BM25 217, özellikler 80,
 sıralayıcı 1,4, bekçi 0,9; toplam 734. Rapor: `eval/results/pipeline-granite-311m-384_3182775.json`.
 
-## Adım 5: Araştırma kağıdı üretimi
+### Adım 5: Araştırma kağıdı üretimi
 
-Seçilen makalelerden (1-5) okuma kartları çıkarılır, LLM bu kartlardan atıflı bir metin yazar,
-kod atıfları doğrular ve kaynakçayı makale bilgilerinden kendisi ekler.
+İlk sürüm: seçilen 1-5 makaleden okuma kartları çıkarılır, LLM bu kartlardan atıflı bir metin yazar, kod
+atıfları doğrular ve kaynakçayı makale bilgilerinden kendisi ekler. Bu "dar yol" Adım 5b'de geniş akışla
+değiştirildi ve kaldırıldı; buradaki bileşenler (tam metin, kartlar, LLM, atıflar) geniş akışta kullanılıyor.
 
-- `core/fulltext.py`: önce arXiv HTML'i, yoksa PDF, o da yoksa özet. İstekler arası en az 3 saniye.
+- `arxiv_rag/generation/fulltext.py`: önce arXiv HTML'i, yoksa PDF, o da yoksa özet. İstekler arası en az 3 saniye.
   Yerel veritabanında olmayan makalelerin bilgileri arXiv API'sinden çekilir.
-- `core/cards.py`: makale başına İngilizce okuma kartı (problem, yöntem, deney kurulumu, bulgular, sınırlar;
+- `arxiv_rag/generation/cards.py`: makale başına İngilizce okuma kartı (problem, yöntem, deney kurulumu, bulgular, sınırlar;
   alan başına 3-8 cümle, metin ne kadar taşıyorsa; sayılar aynen), `data/cache.db` içinde önbellekli. Kart
   sürümü değişince eski kartlar yenilenir. `FULLTEXT_POLICY=cc` ile tam metin sadece CC lisanslı makalelerde
   kullanılır.
-- `core/writer.py`: üç tür (`survey`, `proposal`, `synthesis`) ve iki dil (`en`, `tr`), **bölüm bölüm** yazılır.
+- `arxiv_rag/generation/writer.py`: üç tür (`survey`, `proposal`, `synthesis`) ve iki dil (`en`, `tr`), **bölüm bölüm** yazılır.
   Her bölüme sadece ona lazım olan malzeme verilir: giriş ve arka plana kartların problem ve yöntem özeti,
   kaynak alt bölümlerine (her kaynak ayrı istek) kartla birlikte tam metinden yöntem ve sonuç parçaları,
   karşılaştırmaya bütün kartlar, sonuç ve özete yazılmış bölümlerin özeti. Özet en başta durur ama en son
   yazılır. Sabit uzunluk hedefi yok, dolgu yasak; her cümle özne ve yüklem içerir. Başlık ayrı bir istekle
   üretilir. Kesilen bölümler raporda işaretlenir.
-- `core/llm.py`: model başına son 60 saniyenin token kullanımı sayılır; `LLM_TPM` (varsayılan 8000) aşılacaksa
+- `arxiv_rag/generation/llm.py`: model başına son 60 saniyenin token kullanımı sayılır; `LLM_TPM` (varsayılan 8000) aşılacaksa
   istek atılmadan beklenir. Ücretli katmanda bu değer yükseltilebilir.
 - Tam metin `data/cache.db` içindeki `texts` tablosunda önbelleğe alınır, kullanıcıya hiçbir zaman gösterilmez.
-- `core/citations.py`: geçersiz `[n]` numaralarını sayar ve temizler, atıf almayan kaynakları ve atıfsız
+- `arxiv_rag/generation/citations.py`: geçersiz `[n]` numaralarını sayar ve temizler, atıf almayan kaynakları ve atıfsız
   paragrafları raporlar (alt başlıktaki ya da listeyi açan satırdaki atıf sayılır), kaynakçayı yazar.
 - Modeller: kartlar `LLM_CARD_MODEL` (varsayılan gpt-oss-20b), yazım `LLM_WRITE_MODEL` (varsayılan gpt-oss-120b).
-
-```
-python -m scripts.generate_paper --ids 1701.06538 2101.03961 2401.04088 --type survey --lang en
-```
 
 Kabul kriteri: üç farklı konuda üretim, geçersiz atıf sıfır, kaynakça makale bilgileriyle birebir aynı.
 
@@ -181,39 +226,7 @@ Atıf ölçümü bölümleri ayırır: plan ve özet bölümleri (önerilen yön
 riskler, özet, sonuç) atıfsız olabilir; diğer bölümlerde her paragraf atıflı olmalıdır. Kaynakların
 sınırlarından türetilen bölümlerde (açık problemler, çıkarımlar) her nokta kaynağına bağlanır.
 
-Açık konular:
-- İndirme şimdilik .md; PDF dışa aktarma Adım 6'dan sonra eklenecek.
-- Genişlik: tarama türü sadece seçilen kaynakları derinlemesine işler ve bunu girişte açıkça belirtir
-  (insan değerlendirmesi: "üç kilometre taşının iyi kurgulanmış incelemesi, ama alanın genişliğini
-  kapsamıyor"). İleride arama hattıyla seçilen makalelere en yakın makaleler bulunup özet düzeyinde
-  "bağlam kaynağı" olarak eklenecek: seçilenler derinlik, bağlam kaynakları genişlik sağlayacak.
-
-## Adım 6a: Bağlam kaynakları ve yerel veri
-
-**Bağlam kaynakları (genişlik):** Seçilen makaleler derinlik sağlar (tam metin, kart, kendi alt bölümü).
-`core/related.py`, seçilen makalelerin her birinin vektörüyle anlamsal arama yapıp en yakın makaleleri bulur.
-Bu makaleler yazıma sadece başlık, yıl ve özetin ilk iki cümlesiyle girer (kaynak başına yaklaşık 80 token,
-hesap); ek yazım isteği ve kart üretimi yoktur. Giriş, arka plan, karşılaştırma, açık problemler gibi bölümlerde
-"yalnızca özetinde yazanlar için" atıflanabilirler. Kaynakça iki gruptur: incelenen çalışmalar ve bağlam
-çalışmaları. En fazla 10 bağlam kaynağı.
-
-```
-python -m scripts.generate_paper --ids 1701.06538 2101.03961 --auto-context 7 --type survey
-python -m scripts.generate_paper --ids 1701.06538 2101.03961 --context 2006.16668 --type survey
-```
-
-**Yerel veri:** Yerelde vektör ve model yoktur. `notebooks/08_local_bundle.py` (Kaggle, CPU; girdiler 01, 04, 06)
-30 binlik örneğin vektörlerini tam vektör dosyasından seçer, modellerle birlikte `local_bundle.zip` yapar.
-Paket satır numarası değil makale kimliği taşır; yerelde içe aktarılırken kimlikler yerel veritabanının satır
-numaralarına eşlenir:
-
-```
-python -m scripts.import_bundle local_bundle.zip
-```
-
-Sonuç: `data/vectors_dev/`, `data/models/` ve yerel veritabanında `term_df`.
-
-## Adım 5b: Geniş akış (üç tür)
+### Adım 5b: Geniş akış (üç tür)
 
 Az sayıda derin kaynakla yazılan metin "seçilmiş çalışmaların incelemesi" olarak kalıyordu (insan değerlendirmesi);
 aynı sorun üç türde de vardı. Geniş akış, arama katmanını üretime bağlar ve üç türde de kullanılır. Türler sadece
@@ -240,11 +253,11 @@ korpusumuzda olanların ne kadarının aday listesine girdiği, elemeden geçti�
 aday listesinden çıkarılır). Tam korpusla Kaggle'da çalışır: `notebooks/09_broad_survey.py`.
 
 ```
-python -m scripts.generate_broad --topic "Mixture of experts for large language models" --type survey \
+python -m scripts.generation.generate --topic "Mixture of experts for large language models" --type survey \
     --seeds 1701.06538 2101.03961 2401.04088 --gold-survey 2407.06204
 ```
 
-## Adım 5c: Kaynak kalitesi
+### Adım 5c: Kaynak kalitesi
 
 İlk geniş çalıştırmada (Kaggle, tam korpus) hakem survey'lerin korpustaki kaynaklarının sadece yaklaşık %5'i aday
 listesine girdi; arama, konuyu metinsel olarak en iyi anlatan yeni makaleleri buluyor, alanın en etkili
@@ -274,7 +287,7 @@ oluştu (insan ve ölçüm değerlendirmesi). Düzeltmeler:
   malzemesi sıkıştırıldı.
 - **Sonuçların repoya gönderilmesi:** Kaggle'da `GITHUB_TOKEN` secret'ı varsa (sadece bu repoya, sadece "Contents:
   Read and write" yetkili fine-grained token) notebook 09 tam üretimden sonra `.md` ve `.json` dosyalarını
-  `eval/generations/` klasörüne kopyalayıp commit'ler ve push'lar (`scripts/publish_results.py`; uzak depo değiştiyse
+  `eval/generations/` klasörüne kopyalayıp commit'ler ve push'lar (`scripts/generation/publish_results.py`; uzak depo değiştiyse
   önce rebase yapar, çıktılarda token maskelenir). Bundan sonra yerelde push'lamadan önce `git pull` gerekir.
 - **Bölüm bütünlüğü:** kabul çalıştırmasında bir karşılaştırma bölümü kesildi ve devam isteğinde model tabloyu baştan
   yazdı (ölçüm). Her bölüm yazıldıktan sonra denetlenir: aynı başlıklı ikinci tablo görülürse metin oradan kesilir,
@@ -297,40 +310,57 @@ oluştu (insan ve ölçüm değerlendirmesi). Düzeltmeler:
 Kapsama ölçümü notu: hakem seti sadece arXiv linki olan kaynaklardan çıkarılır, bu yüzden mutlak oranlar düşük
 görünür; anlamlı olan aynı hakemle önce/sonra karşılaştırmasıdır.
 
-## Adım 6b: API (FastAPI)
+### Adım 6a: Yerel veri
 
-Geniş akış ikiye ayrıldı: `core/survey.select_sources` (kaynak seçimi; JSON'a yazılabilir "seçim") ve
-`core/survey.write_from_selection` (seçimden yazım; çıkarılan kaynaklar ve ilerleme geri çağrısıyla). Kullanıcının
-gördüğü plan, yazılan metinle birebir aynıdır.
+Yerelde vektör ve model yoktur. `notebooks/08_local_bundle.py` (Kaggle, CPU; girdiler 01, 04, 06)
+30 binlik örneğin vektörlerini tam vektör dosyasından seçer, modellerle birlikte `local_bundle.zip` yapar.
+Paket satır numarası değil makale kimliği taşır; yerelde içe aktarılırken kimlikler yerel veritabanının satır
+numaralarına eşlenir:
+
+```
+python -m scripts.data.import_bundle local_bundle.zip
+```
+
+Sonuç: `data/vectors_dev/`, `data/models/` ve yerel veritabanında `term_df`.
+
+Bu adımda denenen "bağlam kaynakları" (seçilen makalelere yakın makalelerin özet düzeyinde eklenmesi)
+geniş akışla gereksiz kaldı ve kaldırıldı.
+
+### Adım 6b: API (FastAPI)
+
+Geniş akış ikiye ayrıldı: `arxiv_rag/generation/document.py` içinde `select_sources` (kaynak seçimi; JSON'a
+yazılabilir "seçim") ve `write_from_selection` (seçimden yazım; çıkarılan kaynaklar ve ilerleme geri çağrısıyla).
+Kullanıcının gördüğü plan, yazılan metinle birebir aynıdır.
 
 | Uç nokta | Ne yapar |
 |---|---|
-| `GET /health` | Durum, kuyruk, sınırlar |
-| `POST /search` `{query, k}` | Arama akışı: sonuçlar (başlık, yazarlar, yıl, kategori, arXiv linki) ve bekçi kararı |
-| `POST /plan` `{topic, type, lang, seeds, focus, force}` | Kuru çalıştırma: temalar, 30 kaynak, ilgi skorları, ileri okuma; `plan_id` |
-| `POST /generate` `{plan_id, removed_ids}` | Arka plan işi başlatır; `job_id` ve kuyruktaki sıra |
-| `GET /jobs/{id}` | Durum (queued/running/done/failed), aşama (cards/sections/translate/verify), ilerleme |
-| `GET /jobs/{id}/download` | Üretilen .md |
-| `GET /jobs/{id}/report` | Üretim raporu (JSON) |
+| `GET /api/health` | Durum, kuyruklar, sınırlar |
+| `POST /api/search` `{query, k}` | Arama akışı: sonuçlar (başlık, yazarlar, yıl, kategori, arXiv linki) ve bekçi kararı |
+| `POST /api/plans` `{topic, type, lang, seeds, focus, force}` | Plan işi (202): kaynak seçimi kuyruğa girer |
+| `GET /api/plans/{plan_id}` | Plan: temalar, 30 kaynak, ilgi skorları, ileri okuma |
+| `POST /api/documents` `{plan_id, removed_ids}` | Belge işi (202): yazım kuyruğa girer |
+| `GET /api/jobs/{job_id}` | Durum (queued/running/done/failed), aşama, ilerleme, kuyruktaki sıra, hata |
+| `GET /api/jobs/{job_id}/document` | Üretilen .md |
+| `GET /api/jobs/{job_id}/report` | Üretim raporu (JSON) |
 
-- Tek işçi thread'i (Groq kotası model başına ortak). Sunucu yeniden başlarsa yarım işler "failed" olur.
-- İşler ve planlar `data/app.db` içinde, çıktılar `data/jobs/` altında.
-- Sınırlar: IP başına saatte 10 plan, günde 2 üretim; günlük toplam 5 üretim (`APP_PLANS_PER_IP_HOUR`,
+- İki işçi thread'i: plan işçisi (kendi veritabanı bağlantısıyla, `SearchPipeline.bind`; aramayı kilitlemez) ve
+  belge işçisi (aynı anda bir belge; Groq kotası model başına ortak). Sunucu yeniden başlarsa yarım işler
+  "failed" olur. Kullanıcıya gösterilen hatalar sınıf adı olmadan saklanır.
+- İşler ve planlar `data/app.db`, çıktılar `data/jobs/`. `frontend/dist` varsa kök adresten arayüz sunulur.
+- Sınırlar: IP başına saatte 10 plan, günde 2 belge; günlük toplam 5 belge (`APP_PLANS_PER_IP_HOUR`,
   `APP_GENERATIONS_PER_IP_DAY`, `APP_GENERATIONS_PER_DAY`). Bir proxy arkasında `APP_TRUST_PROXY=1`.
 - Diğer ayarlar: `APP_PAPERS_DB`, `APP_CACHE_DB`, `APP_DB`, `APP_VECTORS_DIR` (varsayılan `data/vectors_dev`),
-  `APP_MODELS_DIR` (varsayılan `data/models`), `APP_OUTPUT_DIR`, `APP_N_SOURCES`.
-- Bekleten çağrılar `async` olmayan uç noktalarda; arama ve plan paylaşılan bağlantıyı kilitle kullanır.
+  `APP_MODELS_DIR` (varsayılan `data/models`), `APP_OUTPUT_DIR`, `APP_FRONTEND_DIR`, `APP_N_SOURCES`.
 
-Yerelde çalıştırma (30 binlik paketle; kalite değil mekanik test içindir):
+Yerelde 30 binlik paketle çalıştırma (kalite değil mekanik test içindir):
 
 ```
-pip install -r requirements.txt
-pip install sentence-transformers
-python -m scripts.import_bundle <yol>\local_bundle.zip
-uvicorn app.main:create_app --factory --port 8000
+pip install -e ".[dev,embed]"
+python -m scripts.data.import_bundle <yol>\local_bundle.zip
+uvicorn arxiv_rag.api.app:create_app --factory --port 8000
 ```
 
-Tarayıcıda `http://127.0.0.1:8000/docs` adresi uç noktaları denemek için hazır bir arayüz sunar.
+`http://127.0.0.1:8000/docs` uç noktaları denemek için hazır bir arayüz sunar.
 
 ## Ölçümler
 

@@ -31,7 +31,7 @@ procs = []
 for shard in range(NUM_SHARDS):
     env = dict(os.environ, CUDA_VISIBLE_DEVICES=str(shard))
     log = open(f"/kaggle/working/embed_shard{shard}.log", "w")
-    cmd = ["python", "-m", "scripts.embed", "--model", MODEL, "--db", DB, "--out-dir", f"{VEC}_shard{shard}",
+    cmd = ["python", "-m", "scripts.data.embed", "--model", MODEL, "--db", DB, "--out-dir", f"{VEC}_shard{shard}",
            "--shard", str(shard), "--num-shards", str(NUM_SHARDS)]
     procs.append(subprocess.Popen(cmd, env=env, stdout=log, stderr=subprocess.STDOUT))
 
@@ -46,13 +46,13 @@ for shard, p in enumerate(procs):
 
 # %%
 SHARD_DIRS = " ".join(f"{VEC}_shard{s}" for s in range(NUM_SHARDS))
-!python -m scripts.merge_vectors {SHARD_DIRS} --out-dir {VEC}
+!python -m scripts.data.merge_vectors {SHARD_DIRS} --out-dir {VEC}
 for s in range(NUM_SHARDS):
     shutil.rmtree(f"{VEC}_shard{s}")
 
 # %%
-!python -m scripts.evaluate --method dense --db {DB} --vectors-dir {VEC}
-!python -m scripts.evaluate --method hybrid --db {DB} --vectors-dir {VEC}
+!python -m scripts.evaluation.evaluate --method dense --db {DB} --vectors-dir {VEC}
+!python -m scripts.evaluation.evaluate --method hybrid --db {DB} --vectors-dir {VEC}
 
 # %%
 import json

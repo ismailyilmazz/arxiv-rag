@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "arxiv-rag"
+version = "0.7.0"
+description = "arXiv araştırma asistanı: anlamsal + BM25 arama, öğrenen sıralama ve atıflı literatür taraması üretimi"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pandas==3.0.2",
+    "pyarrow==25.0.1",
+    "python-dotenv==1.2.2",
+    "openai==3.22.1",
+    "scikit-learn==1.8.0",
+    "nltk==3.10.3",
+    "lightgbm==4.7.0",
+    "beautifulsoup4==4.14.3",
+    "pypdf==5.9.0",
+    "fastapi==0.143.0",
+    "uvicorn==0.54.0",
+]
+
+[project.optional-dependencies]
+embed = ["sentence-transformers"]
+dev = ["pytest==9.1.1", "httpx==0.28.1", "ruff==0.14.1"]
+
+[tool.setuptools.packages.find]
+include = ["arxiv_rag*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+filterwarnings = ["ignore::sklearn.exceptions.ConvergenceWarning"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+extend-exclude = ["notebooks"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]

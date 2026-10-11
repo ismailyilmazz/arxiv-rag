@@ -1,6 +1,6 @@
 import pytest
 
-from core.db import COLUMNS, connect, init_db, upsert_papers
+from arxiv_rag.storage.db import COLUMNS, connect, init_db, upsert_papers
 
 
 def make_row(pid, title, abstract):
@@ -14,13 +14,21 @@ def small_db(tmp_path):
     path = tmp_path / "papers.db"
     conn = connect(path)
     init_db(conn)
-    upsert_papers(conn, [
-        make_row("2310.00001", "Graph neural networks for traffic forecasting",
-                 "We forecast road traffic with graph neural networks."),
-        make_row("2310.00002", "Reinforcement learning for robot grasping",
-                 "Robots learn grasping policies with reinforcement learning."),
-        make_row("hep-th/9901001", "Black hole entropy in string theory",
-                 "We count microstates of black holes."),
-    ])
+    upsert_papers(
+        conn,
+        [
+            make_row(
+                "2310.00001",
+                "Graph neural networks for traffic forecasting",
+                "We forecast road traffic with graph neural networks.",
+            ),
+            make_row(
+                "2310.00002",
+                "Reinforcement learning for robot grasping",
+                "Robots learn grasping policies with reinforcement learning.",
+            ),
+            make_row("hep-th/9901001", "Black hole entropy in string theory", "We count microstates of black holes."),
+        ],
+    )
     yield conn, path
     conn.close()

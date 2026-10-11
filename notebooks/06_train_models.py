@@ -36,17 +36,17 @@ print(dbs[0])
 print(VEC)
 
 # %%
-!python -m scripts.train_field_classifier --db {DB} --vectors-dir {VEC} --out {MODELS}/field_clf.joblib
+!python -m scripts.training.train_field_classifier --db {DB} --vectors-dir {VEC} --out {MODELS}/field_clf.joblib
 
 # %%
 COMMON = f"--db {DB} --vectors-dir {VEC} --field-model {MODELS}/field_clf.joblib --out-dir {FEATS}"
-!python -m scripts.build_features {COMMON} --queries train/queries.jsonl --split train --add-titles
-!python -m scripts.build_features {COMMON} --queries train/offtopic.jsonl --split offtopic
-!python -m scripts.build_features {COMMON} --queries eval/queries.jsonl --split eval
+!python -m scripts.training.build_features {COMMON} --queries train/queries.jsonl --split train --add-titles
+!python -m scripts.training.build_features {COMMON} --queries train/offtopic.jsonl --split offtopic
+!python -m scripts.training.build_features {COMMON} --queries eval/queries.jsonl --split eval
 
 # %%
-!python -m scripts.train_ranker --features-dir {FEATS} --model-out {MODELS}/ranker.txt
-!python -m scripts.train_guard --features-dir {FEATS} --ranker-model {MODELS}/ranker.txt --model-out {MODELS}/guard.joblib
+!python -m scripts.training.train_ranker --features-dir {FEATS} --model-out {MODELS}/ranker.txt
+!python -m scripts.training.train_guard --features-dir {FEATS} --ranker-model {MODELS}/ranker.txt --model-out {MODELS}/guard.joblib
 
 # %%
-!python -m scripts.evaluate --method bm25-gate --db {DB}
+!python -m scripts.evaluation.evaluate --method bm25-gate --db {DB}
