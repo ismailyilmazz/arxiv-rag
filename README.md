@@ -33,6 +33,7 @@ scripts/                   komut satırı işleri
   training/                eğitim sorguları, alan sınıflandırıcısı, özellikler, sıralayıcı, bekçi
   evaluation/              değerlendirme seti, yöntem karşılaştırması
   generation/              belge üretimi (komut satırı), Kaggle sonuçlarını repoya gönderme
+frontend/                  React + TypeScript (Vite) arayüzü; derlenmiş çıktı frontend/dist (git'e girmez)
 notebooks/                 Kaggle'da çalışan ağır işler (01-09); dizin: notebooks/README.md
 tests/                     paketle aynı düzende birim testleri (storage, search, generation, ...)
 eval/                      değerlendirme seti, ölçüm raporları, üretim örnekleri
@@ -67,11 +68,18 @@ ARXIV_CONTACT_EMAIL=
 
 ## Kullanım
 
-API ve (derlenmişse) arayüz:
+API ve (derlenmişse) arayüz `http://127.0.0.1:8000` adresinde:
 
 ```
+cd frontend
+npm ci
+npm run build
+cd ..
 uvicorn arxiv_rag.api.app:create_app --factory --port 8000
 ```
+
+Arayüz üzerinde çalışırken API açıkken `cd frontend` ve `npm run dev`: Vite `http://127.0.0.1:5173` adresinde açılır,
+`/api` isteklerini 8000 portuna yönlendirir ve kod değiştikçe sayfayı yeniler.
 
 Komut satırından belge üretimi (tam korpus gerekir; Kaggle'da `notebooks/09_broad_survey.py`):
 
@@ -361,6 +369,22 @@ uvicorn arxiv_rag.api.app:create_app --factory --port 8000
 ```
 
 `http://127.0.0.1:8000/docs` uç noktaları denemek için hazır bir arayüz sunar.
+
+### Adım 6c: Arayüz (React + TypeScript)
+
+`frontend/`: Vite, React 19, TypeScript 7 (katı mod), `marked` + `DOMPurify` ile güvenli markdown, gömülü fontlar
+(Literata, IBM Plex Sans; dış sunucuya istek yok). Sürümler sabit ve `package-lock.json` ile kilitli; son 14 gün içinde
+yayımlanmış sürümler seçilmedi. npm 10'daki bir eş bağımlılık çözücü hatası (`edgesOut`) yüzünden `vitest` sürümü
+`overrides` ile tek sürüme sabitlendi.
+
+Akış üç adımdır: konu (tür, dil, odak, arama, en fazla 5 tohum; bekçi reddederse "yine de plan oluştur"), plan
+(temalar, kaynakları çıkarma, ileri okuma, konu dışı bulunup çıkarılanlar), belge (aşama ve ilerleme, işlenmiş
+belge, .md ve rapor indirme). Bir iş sürerken düğmeler kapalıdır; tamamlanan adımlar özete dönüşür; yeni açılan adımın
+başlığı odak alır. Kullanıcı geri bildirimiyle: arama düğmesi hep açıktır, konu boşsa ne yapılacağını söyler; konu kutusu
+belirgin bir alandır; "odak" yerine "özellikle ele alınacak yön"; arama, plan ve belge süreçleri sağ üstte × ile kapanan
+birer bildirim kartı gösterir (aynı sürecin yeni kartı eskisinin yerini alır); üst çubukta adım göstergesi; Enter ile
+arama. Lâl renk sadece hata ve ana eylem içindir, odak lacivert gösterilir. Testler (`npm test`, Vitest + Testing Library): API istemcisi, markdown güvenliği, plan düzenleme
+ve sahte API ile uçtan uca akış.
 
 ## Ölçümler
 

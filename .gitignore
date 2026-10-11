@@ -3,7 +3,7 @@
 venv/
 .venv/
 
-data/
+/data/
 *.db
 *.parquet
 *.npy
