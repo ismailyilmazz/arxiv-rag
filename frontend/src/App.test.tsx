@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
-import { docTypes, text } from "./strings";
+import { docTypes, stages, text } from "./strings";
 
 const results = ["2101.03961", "1701.06538", "2401.04088", "2202.08906"].map((id, i) => ({
   id,
@@ -34,7 +34,7 @@ const plan = {
   forced: false,
 };
 
-function fakeServer() {
+function fakeServer(pollsUntilDone = 2, found = results) {
   const calls: { url: string; body?: unknown }[] = [];
   const polls: Record<string, number> = {};
   const job = (id: string, kind: string, extra: object) => ({
@@ -45,14 +45,14 @@ function fakeServer() {
     calls,
     fetch: vi.fn(async (url: string, init?: RequestInit) => {
       calls.push({ url, body: init?.body ? JSON.parse(String(init.body)) : undefined });
-      if (url === "/api/search") return json({ query: "q", accepted: true, guard_prob: 0.9, results });
+      if (url === "/api/search") return json({ query: "q", accepted: true, guard_prob: 0.9, results: found });
       if (url === "/api/plans") return json({ job_id: "plan-job", position: 1 });
       if (url === "/api/documents") return json({ job_id: "doc-job", position: 1 });
       if (url === "/api/plans/p1") return json(plan);
       if (url.startsWith("/api/jobs/") && !url.endsWith("/document")) {
         const id = url.split("/")[3];
         polls[id] = (polls[id] ?? 0) + 1;
-        const finished = polls[id] > 1;
+        const finished = polls[id] >= pollsUntilDone;
         if (id === "plan-job")
           return json(job(id, "plan", finished ? { status: "done", stage: "done", plan_id: "p1" } : { status: "running" }));
         return json(job(id, "document", finished
@@ -125,9 +125,13 @@ describe("App", () => {
     render(<App pollMs={5} />);
     await user.type(screen.getByLabelText(text.topicQuestion), "pizza tarifi{Enter}");
     expect(await screen.findByText(text.weakMatch)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: text.createPlan })).toBeDisabled();
+    const button = screen.getByRole("button", { name: text.createPlan });
+    expect(button).toBeEnabled();
+    await user.click(button);
+    expect(screen.getByRole("alert")).toHaveTextContent(text.needForce);
+    expect(vi.mocked(fetch).mock.calls.filter(([url]) => url === "/api/plans")).toHaveLength(0);
     await user.click(screen.getByLabelText(text.forceAnyway));
-    expect(screen.getByRole("button", { name: text.createPlan })).toBeEnabled();
+    expect(screen.queryByText(text.needForce)).not.toBeInTheDocument();
   });
 
   it("explains an empty topic instead of silently blocking the search", async () => {
@@ -143,5 +147,35 @@ describe("App", () => {
     expect(fetchMock).not.toHaveBeenCalled();
     await user.type(screen.getByLabelText(text.topicQuestion), "rag");
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("explains the seed limit instead of disabling the sixth box", async () => {
+    const many = ["a", "b", "c", "d", "e", "f"].map((id, i) => ({ ...results[0], id: `2101.0000${i}`, title: `Paper ${id}` }));
+    vi.stubGlobal("fetch", fakeServer(2, many).fetch);
+    const user = userEvent.setup();
+    render(<App pollMs={5} />);
+    await user.type(screen.getByLabelText(text.topicQuestion), "experts{Enter}");
+    await user.click(await screen.findByRole("checkbox", { name: "Paper d" }));
+    await user.click(screen.getByRole("checkbox", { name: "Paper e" }));
+    const sixth = screen.getByRole("checkbox", { name: "Paper f" });
+    expect(sixth).toBeEnabled();
+    await user.click(sixth);
+    expect(sixth).not.toBeChecked();
+    expect(screen.getByRole("alert")).toHaveTextContent(text.seedLimit);
+    expect(screen.getByText(text.found(6, 5))).toBeInTheDocument();
+  });
+
+  it("asks to wait instead of disabling edit while a job is running", async () => {
+    vi.stubGlobal("fetch", fakeServer(Number.POSITIVE_INFINITY).fetch);
+    const user = userEvent.setup();
+    render(<App pollMs={5} />);
+    await user.type(screen.getByLabelText(text.topicQuestion), "experts{Enter}");
+    await user.click(await screen.findByRole("button", { name: text.createPlan }));
+    expect(await screen.findByText(stages.sections, { exact: false })).toBeInTheDocument();
+    const edit = screen.getByRole("button", { name: text.edit });
+    expect(edit).toBeEnabled();
+    await user.click(edit);
+    expect(await screen.findByText(text.waitForJob)).toBeInTheDocument();
+    expect(screen.getByText("experts", { selector: ".summary__topic" })).toBeInTheDocument();
   });
 });

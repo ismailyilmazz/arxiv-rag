@@ -294,10 +294,9 @@ legend {
   background: #93202f;
 }
 
-.button:disabled {
-  background: var(--rule);
-  color: var(--graphite);
-  cursor: not-allowed;
+.button[aria-busy="true"] {
+  background: #93202f;
+  cursor: progress;
 }
 
 .link {
@@ -310,11 +309,6 @@ legend {
   text-decoration-color: var(--rule);
   text-underline-offset: 0.2em;
   cursor: pointer;
-}
-
-.link:disabled {
-  color: var(--graphite);
-  cursor: not-allowed;
 }
 
 .results {

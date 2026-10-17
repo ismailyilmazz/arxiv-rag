@@ -48,6 +48,9 @@ export const text = {
   noResults: "Bu konuda makale bulunamadı. Konuyu daha genel ya da İngilizce terimlerle yaz.",
   weakMatch: "Bu konu korpustaki makalelerle zayıf eşleşiyor; sonuçlar ilgisiz olabilir.",
   forceAnyway: "Yine de plan oluştur",
+  needForce: "Bu konu korpusla zayıf eşleşiyor. Devam etmek için yukarıdaki \"Yine de plan oluştur\" kutusunu işaretle.",
+  seedLimit: "En fazla 5 makale seçebilirsin. Yenisini eklemek için önce birinin işaretini kaldır.",
+  waitForJob: "Devam eden iş bitince bunu yapabilirsin.",
   createPlan: "Plan oluştur",
   planHeading: (sources: number, themes: number) => `${sources} kaynak, ${themes} tema`,
   planHint:

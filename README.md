@@ -33,8 +33,12 @@ scripts/                   komut satırı işleri
   training/                eğitim sorguları, alan sınıflandırıcısı, özellikler, sıralayıcı, bekçi
   evaluation/              değerlendirme seti, yöntem karşılaştırması
   generation/              belge üretimi (komut satırı), Kaggle sonuçlarını repoya gönderme
+  deploy/                  sunucu verisini Hugging Face'ten indirme ve doğrulama
 frontend/                  React + TypeScript (Vite) arayüzü; derlenmiş çıktı frontend/dist (git'e girmez)
-notebooks/                 Kaggle'da çalışan ağır işler (01-09); dizin: notebooks/README.md
+notebooks/                 Kaggle'da çalışan ağır işler (01-10); dizin: notebooks/README.md
+deploy/                    sunucu kurulumu: Caddyfile, setup.sh, .env şablonu
+docs/                      yayına alma rehberi (deploy-oracle.md)
+Dockerfile                 arayüz derleme + Python çalışma imajı; docker-compose.yml: uygulama + Caddy (HTTPS)
 tests/                     paketle aynı düzende birim testleri (storage, search, generation, ...)
 eval/                      değerlendirme seti, ölçüm raporları, üretim örnekleri
 train/                     LLM ile üretilmiş eğitim sorguları
@@ -385,6 +389,22 @@ belirgin bir alandır; "odak" yerine "özellikle ele alınacak yön"; arama, pla
 birer bildirim kartı gösterir (aynı sürecin yeni kartı eskisinin yerini alır); üst çubukta adım göstergesi; Enter ile
 arama. Lâl renk sadece hata ve ana eylem içindir, odak lacivert gösterilir. Testler (`npm test`, Vitest + Testing Library): API istemcisi, markdown güvenliği, plan düzenleme
 ve sahte API ile uçtan uca akış.
+
+### Adım 7: Yayına alma (Oracle Cloud Always Free)
+
+Hugging Face Docker Spaces artık ücretli plan gerektiriyor; tamamen ücretsiz kalmak için Oracle Cloud'un ARM sanal
+makinesi (4 çekirdek, 24 GB bellek, kalıcı disk) seçildi. Adım adım rehber: `docs/deploy-oracle.md`.
+
+- Veri yolu: Kaggle (04, 06) → `notebooks/10_publish_data.py` → Hugging Face veri deposu
+  (`ismailylmz283/arxiv-rag-data`, tek commit, `manifest.json` ile) → sunucuda `scripts/deploy/fetch_data.py`
+  (eksikleri tamamlar, boyutları manifestle doğrular).
+- `Dockerfile`: arayüz Node ile derlenir; Python 3.13 imajında torch PyTorch'un CPU deposundan kurulur (PyPI'daki Linux
+  paketi ARM'da bile CUDA kütüphanelerini çeker); bağımlılıklar kod değişmedikçe yeniden kurulmaz; yetkisiz kullanıcı.
+- `docker-compose.yml`: uygulama (dışarıya kapalı) + Caddy (80/443, otomatik HTTPS, `sslip.io` adresi).
+  `APP_PRELOAD=1` ile arama akışı açılışta belleğe yüklenir.
+- scikit-learn, modellerin kaydedildiği sürüme (1.6.1) sabitlendi; bütün testler bu sürümle geçiyor. Notebook 10 bu
+  sürümü modellerin kendisinden okuyup doğrular.
+- Arayüzde hiçbir düğme kapalı duruma geçmez; yapılamayan bir eyleme basılınca nedeni söylenir.
 
 ## Ölçümler
 

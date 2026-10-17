@@ -32,7 +32,7 @@ const plan: Plan = {
 function Harness({ onWrite }: { onWrite: (removed: string[]) => void }) {
   const [removed, setRemoved] = useState<string[]>([]);
   const toggle = (id: string) => setRemoved((r) => (r.includes(id) ? r.filter((x) => x !== id) : [...r, id]));
-  return <PlanStep plan={plan} removed={removed} busy={false} collapsed={false} onToggle={toggle} onWrite={() => onWrite(removed)} />;
+  return <PlanStep plan={plan} removed={removed} collapsed={false} onToggle={toggle} onWrite={() => onWrite(removed)} />;
 }
 
 describe("PlanStep", () => {
@@ -53,7 +53,10 @@ describe("PlanStep", () => {
     await userEvent.click(screen.getByRole("button", { name: text.writeDocument }));
     expect(onWrite).toHaveBeenCalledWith(["2401.04088"]);
     await userEvent.click(screen.getByRole("checkbox", { name: "Switch Transformers" }));
-    expect(screen.getByRole("button", { name: text.writeDocument })).toBeDisabled();
-    expect(screen.getByText(text.noSourcesLeft)).toBeInTheDocument();
+    const button = screen.getByRole("button", { name: text.writeDocument });
+    expect(button).toBeEnabled();
+    expect(screen.getByRole("alert")).toHaveTextContent(text.noSourcesLeft);
+    await userEvent.click(button);
+    expect(onWrite).toHaveBeenCalledTimes(1);
   });
 });

@@ -49,6 +49,7 @@ export function App({ pollMs = 1500 }: { pollMs?: number }) {
   const [error, setError] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const lastToast = useRef(0);
+  const sending = useRef(false);
   const planJob = useJob(planJobId, pollMs);
   const docJob = useJob(docJobId, pollMs);
   const busy = planJob.active || docJob.active;
@@ -98,27 +99,41 @@ export function App({ pollMs = 1500 }: { pollMs?: number }) {
     setError(null);
   };
 
-  const startPlan = async (request: PlanRequest) => {
-    clearJobs();
+  const once = async (action: () => Promise<void>) => {
+    if (sending.current) return;
+    sending.current = true;
     try {
-      setPlanJobId((await api.createPlan(request)).job_id);
-      notify("plan", text.toasts.planAccepted);
-    } catch (e) {
-      setError(messageOf(e));
+      await action();
+    } finally {
+      sending.current = false;
     }
   };
 
-  const write = async () => {
-    if (!plan) return;
-    setError(null);
-    setMarkdown(null);
-    try {
-      setDocJobId((await api.createDocument(plan.plan_id, removed)).job_id);
-      notify("document", text.toasts.documentAccepted);
-    } catch (e) {
-      setError(messageOf(e));
-    }
-  };
+  const startPlan = (request: PlanRequest) =>
+    once(async () => {
+      clearJobs();
+      try {
+        setPlanJobId((await api.createPlan(request)).job_id);
+        notify("plan", text.toasts.planAccepted);
+      } catch (e) {
+        setError(messageOf(e));
+      }
+    });
+
+  const write = () =>
+    once(async () => {
+      if (!plan) return;
+      setError(null);
+      setMarkdown(null);
+      try {
+        setDocJobId((await api.createDocument(plan.plan_id, removed)).job_id);
+        notify("document", text.toasts.documentAccepted);
+      } catch (e) {
+        setError(messageOf(e));
+      }
+    });
+
+  const whenIdle = (action: () => void) => () => (busy ? notify("plan", text.waitForJob) : action());
 
   const toggle = (id: string) =>
     setRemoved((current) => (current.includes(id) ? current.filter((r) => r !== id) : [...current, id]));
@@ -135,7 +150,7 @@ export function App({ pollMs = 1500 }: { pollMs?: number }) {
         <p className="masthead__name">{text.title}</p>
         <Progress current={current} finished={markdown !== null} />
         {planJobId && (
-          <button className="link masthead__reset" type="button" onClick={reset} disabled={busy}>
+          <button className="link masthead__reset" type="button" onClick={whenIdle(reset)}>
             {text.newTopic}
           </button>
         )}
@@ -144,8 +159,13 @@ export function App({ pollMs = 1500 }: { pollMs?: number }) {
         <ol className="steps">
           <li className="step">
             <h2 className="step__title">{text.steps.topic}</h2>
-            <TopicStep key={round} busy={busy} locked={planJobId !== null} onFound={found} onPlan={startPlan}
-                       onEdit={clearJobs} />
+            <TopicStep
+              key={round}
+              locked={planJobId !== null}
+              onFound={found}
+              onPlan={startPlan}
+              onEdit={whenIdle(clearJobs)}
+            />
           </li>
           {planJobId && (
             <li className="step">
@@ -155,7 +175,6 @@ export function App({ pollMs = 1500 }: { pollMs?: number }) {
                 <PlanStep
                   plan={plan}
                   removed={removed}
-                  busy={busy}
                   collapsed={docJobId !== null && docJob.job?.status !== "failed"}
                   onToggle={toggle}
                   onWrite={write}

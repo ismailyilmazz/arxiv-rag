@@ -108,6 +108,8 @@ def create_app(
         store.fail_unfinished(RESTART_MESSAGE)
         for worker in workers.values():
             worker.start()
+    if settings.preload:
+        threading.Thread(target=loaded, name="preload", daemon=True).start()
 
     def client_ip(request: Request) -> str:
         forwarded = request.headers.get("x-forwarded-for")

@@ -17,5 +17,9 @@ silinmemelidir: tam korpus vektörleri ve eğitilmiş modeller sadece oradadır.
 | 08 | `08_local_bundle.py` | 01 + 04 + 06 | CPU | 30 binlik örneğin vektörleri ve modelleri | `local_bundle.zip` |
 | 09 | `09_broad_survey.py` | 04 + 06 | CPU, internet, Secrets | Geniş akışla belge üretimi ya da kuru çalıştırma (`DRY_RUN`), hakem survey'e karşı kapsama | `generations/` (isteğe bağlı otomatik push) |
 
+| 10 | `10_publish_data.py` | 04 + 06 | CPU, internet, Secrets | Sunucu verisini Hugging Face veri deposuna yükler, model sürümünü ve boyutları doğrular | `ismailylmz283/arxiv-rag-data` |
+
+Notebook 10 için Kaggle **Secrets**: `HF_TOKEN` (Hugging Face yazma token'ı).
+
 Notebook 09 için Kaggle **Secrets**: `LLM_API_KEY`, `ARXIV_CONTACT_EMAIL` (zorunlu); `GITHUB_TOKEN` (sonuçları repoya
 göndermek için, isteğe bağlı); `S2_API_KEY` (isteğe bağlı).

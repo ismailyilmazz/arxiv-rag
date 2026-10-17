@@ -6,13 +6,12 @@ import { text } from "../strings";
 interface Props {
   plan: Plan;
   removed: string[];
-  busy: boolean;
   collapsed: boolean;
   onToggle: (id: string) => void;
   onWrite: () => void;
 }
 
-export function PlanStep({ plan, removed, busy, collapsed, onToggle, onWrite }: Props) {
+export function PlanStep({ plan, removed, collapsed, onToggle, onWrite }: Props) {
   const scale = useMemo(() => {
     const values = plan.themes.flatMap((t) => t.papers.map((p) => p.relevance ?? 0));
     const low = Math.min(...values);
@@ -44,7 +43,6 @@ export function PlanStep({ plan, removed, busy, collapsed, onToggle, onWrite }: 
                     type="checkbox"
                     aria-label={paper.title}
                     checked={included}
-                    disabled={busy}
                     onChange={() => onToggle(paper.id)}
                   />
                   <div>
@@ -94,9 +92,13 @@ export function PlanStep({ plan, removed, busy, collapsed, onToggle, onWrite }: 
         </details>
       )}
       </details>
-      {!collapsed && kept === 0 && <p className="notice notice--error">{text.noSourcesLeft}</p>}
+      {!collapsed && kept === 0 && (
+        <p className="field-error" role="alert">
+          {text.noSourcesLeft}
+        </p>
+      )}
       {!collapsed && (
-        <button className="button" type="button" onClick={onWrite} disabled={busy || kept === 0}>
+        <button className="button" type="button" onClick={() => kept > 0 && onWrite()}>
           {text.writeDocument}
         </button>
       )}

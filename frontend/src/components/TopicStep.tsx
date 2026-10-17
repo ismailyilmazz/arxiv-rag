@@ -7,14 +7,13 @@ import { docTypes, languages, text } from "../strings";
 const MAX_SEEDS = 5;
 
 interface Props {
-  busy: boolean;
   locked: boolean;
   onFound: (count: number) => void;
   onPlan: (request: PlanRequest) => void;
   onEdit: () => void;
 }
 
-export function TopicStep({ busy, locked, onFound, onPlan, onEdit }: Props) {
+export function TopicStep({ locked, onFound, onPlan, onEdit }: Props) {
   const [topic, setTopic] = useState("");
   const [docType, setDocType] = useState<DocType>("survey");
   const [lang, setLang] = useState<Lang>("tr");
@@ -24,11 +23,13 @@ export function TopicStep({ busy, locked, onFound, onPlan, onEdit }: Props) {
   const [force, setForce] = useState(false);
   const [searching, setSearching] = useState(false);
   const [missingTopic, setMissingTopic] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const input = useRef<HTMLTextAreaElement>(null);
 
   const search = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (searching) return;
     if (topic.trim().length < 2) {
       setMissingTopic(true);
       input.current?.focus();
@@ -41,6 +42,7 @@ export function TopicStep({ busy, locked, onFound, onPlan, onEdit }: Props) {
       setFound(response);
       setSeeds(response.results.slice(0, 3).map((r) => r.id));
       setForce(false);
+      setNotice(null);
       if (response.results.length > 0) onFound(response.results.length);
     } catch (e) {
       setError(messageOf(e));
@@ -56,12 +58,26 @@ export function TopicStep({ busy, locked, onFound, onPlan, onEdit }: Props) {
     }
   };
 
-  const toggleSeed = (id: string) =>
-    setSeeds((current) =>
-      current.includes(id) ? current.filter((s) => s !== id) : current.length < MAX_SEEDS ? [...current, id] : current,
-    );
+  const toggleSeed = (id: string) => {
+    if (seeds.includes(id)) {
+      setSeeds(seeds.filter((s) => s !== id));
+      setNotice(null);
+    } else if (seeds.length >= MAX_SEEDS) {
+      setNotice(text.seedLimit);
+    } else {
+      setSeeds([...seeds, id]);
+      setNotice(null);
+    }
+  };
 
-  const plan = () => onPlan({ topic: topic.trim(), type: docType, lang, seeds, focus: focus.trim() || null, force });
+  const plan = () => {
+    if (found && !found.accepted && !force) {
+      setNotice(text.needForce);
+      return;
+    }
+    setNotice(null);
+    onPlan({ topic: topic.trim(), type: docType, lang, seeds, focus: focus.trim() || null, force });
+  };
 
   if (locked) {
     return (
@@ -71,14 +87,13 @@ export function TopicStep({ busy, locked, onFound, onPlan, onEdit }: Props) {
           {docTypes[docType].name}, {languages[lang]}
           {focus.trim() && `, ${focus.trim()}`}
         </p>
-        <button className="link" type="button" onClick={onEdit} disabled={busy}>
+        <button className="link" type="button" onClick={onEdit}>
           {text.edit}
         </button>
       </div>
     );
   }
 
-  const blocked = found !== null && !found.accepted && !force;
   return (
     <div className="topic">
       <form className="topic__form" onSubmit={search} noValidate>
@@ -144,7 +159,7 @@ export function TopicStep({ busy, locked, onFound, onPlan, onEdit }: Props) {
             </p>
           </div>
         </div>
-        <button className="button" type="submit" disabled={searching || busy}>
+        <button className="button" type="submit" aria-busy={searching}>
           {searching ? text.searching : text.search}
         </button>
       </form>
@@ -166,7 +181,15 @@ export function TopicStep({ busy, locked, onFound, onPlan, onEdit }: Props) {
             <div className="notice">
               <p>{text.weakMatch}</p>
               <label>
-                <input type="checkbox" checked={force} onChange={(e) => setForce(e.target.checked)} /> {text.forceAnyway}
+                <input
+                  type="checkbox"
+                  checked={force}
+                  onChange={(e) => {
+                    setForce(e.target.checked);
+                    if (e.target.checked) setNotice(null);
+                  }}
+                />{" "}
+                {text.forceAnyway}
               </label>
             </div>
           )}
@@ -177,7 +200,6 @@ export function TopicStep({ busy, locked, onFound, onPlan, onEdit }: Props) {
                   type="checkbox"
                   aria-label={r.title ?? r.id}
                   checked={seeds.includes(r.id)}
-                  disabled={!seeds.includes(r.id) && seeds.length >= MAX_SEEDS}
                   onChange={() => toggleSeed(r.id)}
                 />
                 <div>
@@ -193,7 +215,12 @@ export function TopicStep({ busy, locked, onFound, onPlan, onEdit }: Props) {
               </li>
             ))}
           </ul>
-          <button className="button" type="button" onClick={plan} disabled={busy || blocked}>
+          {notice && (
+            <p className="field-error" role="alert">
+              {notice}
+            </p>
+          )}
+          <button className="button" type="button" onClick={plan}>
             {text.createPlan}
           </button>
         </fieldset>

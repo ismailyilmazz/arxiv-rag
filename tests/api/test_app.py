@@ -240,3 +240,11 @@ def test_frontend_is_served_when_built(tmp_path):
     app, client, _ = build(tmp_path)
     assert "arxiv-rag" in client.get("/").text
     assert client.get("/api/health").json()["status"] == "ok"
+
+
+def test_preload_loads_the_pipeline_at_startup(tmp_path):
+    app, client, _ = build(tmp_path, preload=True)
+    deadline = time.time() + 5
+    while time.time() < deadline and not client.get("/api/health").json()["pipeline_loaded"]:
+        time.sleep(0.02)
+    assert client.get("/api/health").json()["pipeline_loaded"] is True

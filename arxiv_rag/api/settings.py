@@ -28,6 +28,7 @@ class Settings:
     generations_per_ip_day: int = 2
     generations_per_day: int = 5
     trust_proxy: bool = False
+    preload: bool = False
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -44,4 +45,5 @@ class Settings:
             generations_per_ip_day=_int("APP_GENERATIONS_PER_IP_DAY", 2),
             generations_per_day=_int("APP_GENERATIONS_PER_DAY", 5),
             trust_proxy=os.getenv("APP_TRUST_PROXY", "0") == "1",
+            preload=os.getenv("APP_PRELOAD", "0") == "1",
         )
