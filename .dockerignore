@@ -7,7 +7,6 @@ eval
 train
 notebooks
 tests
-docs
 deploy
 **/__pycache__
 **/*.egg-info
