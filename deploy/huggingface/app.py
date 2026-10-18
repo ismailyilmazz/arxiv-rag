@@ -18,7 +18,6 @@ for key, value in {
 
 import gradio as gr
 import uvicorn
-from starlette.routing import Mount
 
 from arxiv_rag.api.app import create_app
 from scripts.deploy.fetch_data import DEFAULT_REPO, fetch
@@ -36,10 +35,7 @@ if os.getenv("SKIP_DATA_DOWNLOAD") != "1":
 app = create_app()
 with gr.Blocks(title="arXiv araştırma asistanı") as demo:
     gr.Markdown("Uygulama ana sayfada: [aç](/)")
-app = gr.mount_gradio_app(app, demo, path="/gradio", ssr_mode=False)
-for route in [r for r in app.router.routes if isinstance(r, Mount) and r.name == "frontend"]:
-    app.router.routes.remove(route)
-    app.router.routes.append(route)
 
 if __name__ == "__main__":
+    demo.launch(server_name="127.0.0.1", server_port=7861, ssr_mode=False, prevent_thread_lock=True)
     uvicorn.run(app, host="0.0.0.0", port=7860)

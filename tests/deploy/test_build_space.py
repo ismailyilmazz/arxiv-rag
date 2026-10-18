@@ -96,3 +96,4 @@ def test_push_uploads_the_built_folder(tmp_path):
 def test_space_app_keeps_port_7860_for_our_server():
     source = (REPO / "deploy" / "huggingface" / "app.py").read_text(encoding="utf-8")
     assert "ssr_mode=False" in source and "port=7860" in source
+    assert "demo.launch(" in source and "server_port=7861" in source
