@@ -36,7 +36,7 @@ if os.getenv("SKIP_DATA_DOWNLOAD") != "1":
 app = create_app()
 with gr.Blocks(title="arXiv araştırma asistanı") as demo:
     gr.Markdown("Uygulama ana sayfada: [aç](/)")
-app = gr.mount_gradio_app(app, demo, path="/gradio")
+app = gr.mount_gradio_app(app, demo, path="/gradio", ssr_mode=False)
 for route in [r for r in app.router.routes if isinstance(r, Mount) and r.name == "frontend"]:
     app.router.routes.remove(route)
     app.router.routes.append(route)

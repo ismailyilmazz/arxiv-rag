@@ -91,3 +91,8 @@ def test_push_uploads_the_built_folder(tmp_path):
     url = build_space.push(tmp_path, "u/s", api=FakeApi())
     assert url.endswith("/commit/abc")
     assert calls["repo_id"] == "u/s" and calls["repo_type"] == "space" and calls["folder_path"] == str(tmp_path)
+
+
+def test_space_app_keeps_port_7860_for_our_server():
+    source = (REPO / "deploy" / "huggingface" / "app.py").read_text(encoding="utf-8")
+    assert "ssr_mode=False" in source and "port=7860" in source
