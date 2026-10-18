@@ -76,7 +76,7 @@ assert set(versions.values()) == {SERVING_SKLEARN}, (
 )
 
 # %%
-with sqlite3.connect(DB) as c:
+with sqlite3.connect(f"file:{DB}?mode=ro&immutable=1", uri=True) as c:
     papers = c.execute("SELECT COUNT(*) FROM papers").fetchone()[0]
 meta = json.load(open(os.path.join(VEC, "meta.json")))
 manifest = {
