@@ -1,3 +1,4 @@
+import json
 import sqlite3
 import time
 
@@ -248,3 +249,19 @@ def test_preload_loads_the_pipeline_at_startup(tmp_path):
     while time.time() < deadline and not client.get("/api/health").json()["pipeline_loaded"]:
         time.sleep(0.02)
     assert client.get("/api/health").json()["pipeline_loaded"] is True
+
+
+def test_search_cleans_tex_titles_and_logs_one_line(tmp_path, capsys):
+    app, client, _ = build(tmp_path)
+    conn = connect(tmp_path / "papers.db")
+    conn.execute(
+        "UPDATE papers SET title = ?, authors = ? WHERE id = ?", (r"T\"{u}rk\c{c}e veri", r"A. G\"{o}k", IDS[0])
+    )
+    conn.commit()
+    conn.close()
+    capsys.readouterr()
+    out = client.post("/api/search", json={"query": "mixture of experts", "k": 2}).json()
+    assert out["results"][0]["title"] == "Türkçe veri" and out["results"][0]["authors"] == "A. Gök"
+    lines = [json.loads(line) for line in capsys.readouterr().err.splitlines() if line.startswith("{")]
+    assert [line["event"] for line in lines] == ["search"]
+    assert lines[0]["query"] == "mixture of experts" and lines[0]["results"] == 2

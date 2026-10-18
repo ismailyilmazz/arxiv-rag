@@ -1,4 +1,5 @@
 import json
+import sys
 import threading
 import time
 from pathlib import Path
@@ -15,6 +16,7 @@ from arxiv_rag.api.worker import RESTART_MESSAGE, Worker
 from arxiv_rag.generation import document
 from arxiv_rag.storage.arxiv_ids import abs_url
 from arxiv_rag.storage.db import connect
+from arxiv_rag.storage.tex import clean_tex
 
 
 def default_pipeline(conn, settings: Settings):
@@ -51,6 +53,11 @@ def default_runner(settings: Settings) -> Callable:
 
 def document_paths(output_dir: Path, job_id: str) -> tuple[Path, Path]:
     return Path(output_dir) / f"{job_id}.md", Path(output_dir) / f"{job_id}.json"
+
+
+def log_event(event: str, **fields) -> None:
+    line = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "event": event, **fields}
+    print(json.dumps(line, ensure_ascii=False), file=sys.stderr, flush=True)
 
 
 def create_app(
@@ -159,12 +166,26 @@ def create_app(
                 else []
             )
         info = {
-            r[0]: {"title": r[1], "authors": r[2], "year": (r[3] or "")[:4] or None, "category": r[4]} for r in rows
+            r[0]: {
+                "title": clean_tex(r[1]),
+                "authors": clean_tex(r[2]),
+                "year": (r[3] or "")[:4] or None,
+                "category": r[4],
+            }
+            for r in rows
         }
         results = [
             {"id": r["id"], "url": abs_url(r["id"]), **info.get(r["id"], {}), "score": round(r["score"], 4)}
             for r in out["results"]
         ]
+        log_event(
+            "search",
+            query=body.query[:80],
+            accepted=out["accepted"],
+            guard_prob=round(out.get("guard_prob") or 0.0, 3),
+            results=len(results),
+            ms=round(sum((out.get("timings_ms") or {}).values())),
+        )
         return {
             "query": body.query,
             "accepted": out["accepted"],
@@ -178,6 +199,7 @@ def create_app(
         ip = client_ip(request)
         if store.count_jobs_since("plan", time.time() - 3600, ip) >= settings.plans_per_ip_hour:
             raise HTTPException(429, "Bu saat için plan sınırına ulaştınız. Biraz sonra tekrar deneyin.")
+        log_event("plan", topic=body.topic[:80], type=body.type, lang=body.lang, seeds=len(body.seeds))
         return enqueue("plan", ip, body.model_dump())
 
     @api.get("/plans/{plan_id}")
@@ -203,6 +225,7 @@ def create_app(
             raise HTTPException(429, "Bugünkü üretim hakkınızı kullandınız. Yarın tekrar deneyin.")
         if store.count_jobs_since("document", day) >= settings.generations_per_day:
             raise HTTPException(429, "Sistemin günlük üretim kapasitesi doldu. Yarın tekrar deneyin.")
+        log_event("document", plan_id=body.plan_id, removed=len(body.removed_ids))
         return enqueue("document", ip, {"removed_ids": body.removed_ids}, body.plan_id)
 
     @api.get("/jobs/{job_id}")

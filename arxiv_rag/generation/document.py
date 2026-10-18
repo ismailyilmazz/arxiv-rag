@@ -16,6 +16,7 @@ from arxiv_rag.generation import cards, citations, llm, scholar, writer
 from arxiv_rag.search import bm25
 from arxiv_rag.search.related import related
 from arxiv_rag.storage.arxiv_ids import normalize_id
+from arxiv_rag.storage.tex import clean_tex
 
 EXPAND_PROMPT = """Topic: {topic}
 
@@ -428,7 +429,7 @@ def select_sources(
         "themes": [{"name": t["name"], "description": t.get("description", ""), "ids": t["ids"]} for t in themes],
         "deep": deep,
         "relevance": {pid: round(relevance[pid], 4) for pid in shown if pid in relevance},
-        "titles": {pid: titles.get(pid, "") for pid in shown},
+        "titles": {pid: clean_tex(titles.get(pid, "")) for pid in shown},
         "tokens": tokens,
         "timings_ms": timings,
     }
@@ -504,7 +505,13 @@ def write_from_selection(
     moved = [m for m in selection["surveys_moved"] if m not in removed]
     wanted = kept + [m for m in moved if m not in kept]
     meta = {
-        r[0]: {"title": r[1], "abstract": r[2], "authors": r[3], "published": r[4], "license": r[5]}
+        r[0]: {
+            "title": clean_tex(r[1]),
+            "abstract": r[2],
+            "authors": clean_tex(r[3]),
+            "published": r[4],
+            "license": r[5],
+        }
         for r in conn.execute(
             f"SELECT id, title, abstract, authors, published, license FROM papers "
             f"WHERE id IN ({','.join('?' * len(wanted))})",

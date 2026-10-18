@@ -1,7 +1,11 @@
 import os
+import sys
 from pathlib import Path
 
 import spaces
+
+sys.stdout.reconfigure(line_buffering=True)
+sys.stderr.reconfigure(line_buffering=True)
 
 ROOT = Path(__file__).resolve().parent
 DATA = Path(os.getenv("DATA_DIR", str(Path.home() / "data")))
@@ -38,4 +42,4 @@ with gr.Blocks(title="arXiv araştırma asistanı") as demo:
 
 if __name__ == "__main__":
     demo.launch(server_name="127.0.0.1", server_port=7861, ssr_mode=False, prevent_thread_lock=True)
-    uvicorn.run(app, host="0.0.0.0", port=7860)
+    uvicorn.run(app, host="0.0.0.0", port=7860, log_level="info")
