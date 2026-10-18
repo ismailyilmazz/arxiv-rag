@@ -1,6 +1,6 @@
 import re
 
-from arxiv_rag.generation import llm
+from arxiv_rag.generation import language, llm
 
 LANGUAGES = {"en": "English", "tr": "Turkish"}
 STYLE = (
@@ -78,6 +78,25 @@ TRANSLATE_PROMPT = """Translate the following section of a {label} from English 
 Section:
 {text}"""
 
+RETRY_TRANSLATE_PROMPT = """The previous translation attempt returned English. Translate the text below into {language}.
+- Every sentence of your output must be in {language}. Only paper titles, model names and standard technical terms
+  (for example state-of-the-art, AUC, embedding, token) may stay in English.
+- Keep every citation such as [3] or [1, 4] exactly as it is and where it is, and keep the markdown formatting.
+- Do not add notes or comments about the text. Return only the translation.
+
+Text:
+{text}"""
+
+HEADINGS_PROMPT = """Translate each line below into {language}. Keep model names and standard technical terms in English.
+Return exactly {n} lines in the same order and nothing else.
+
+{lines}"""
+
+MAX_ENGLISH_SHARE = 0.0
+META_NOTE = re.compile(
+    r"\s*\((?=[^()]*(?:çevir|translat))(?=[^()]*(?:eksik|tamamlan|yapılamad|incomplete|missing|could not))[^()]{5,300}\)"
+)
+
 _SEPARATOR = re.compile(r"^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$")
 _TERMINAL = re.compile(r"[.!?\])\"'\u201d]\s*$")
 
@@ -111,6 +130,67 @@ def tidy_section(text: str) -> tuple[str, bool]:
         if ends:
             body, changed = body[: ends[-1]].rstrip(), True
     return body, changed
+
+
+def strip_meta_notes(text: str) -> str:
+    return META_NOTE.sub("", text)
+
+
+def _citation_numbers(text: str) -> set[int]:
+    return {int(n) for group in re.findall(r"\[([\d,\s\u2013-]+)\]", text) for n in re.findall(r"\d+", group)}
+
+
+def is_complete(candidate: str, source: str, min_ratio: float = 0.7) -> bool:
+    return _citation_numbers(source) <= _citation_numbers(candidate) and len(candidate.strip()) >= min_ratio * len(
+        source.strip()
+    )
+
+
+def repair_paragraphs(text: str, lang: str, model: str, tables: bool = False) -> tuple[str, int, int, int]:
+    blocks, tokens, repaired, failed = re.split(r"\n\s*\n", text.strip()), 0, 0, 0
+    for i, block in enumerate(blocks):
+        is_table = block.lstrip().startswith("|")
+        prose = " ".join(line for line in block.splitlines() if not line.lstrip().startswith(("|", "#")))
+        wanted = (tables and is_table) or (
+            not is_table and len(prose.split()) >= 8 and language.paragraph_is_english(prose)
+        )
+        if not wanted:
+            continue
+        prompt = RETRY_TRANSLATE_PROMPT.format(language=LANGUAGES[lang], text=block)
+        for _ in range(2):
+            piece, extra, _ = _call(prompt, model, 2000)
+            piece, tokens = strip_meta_notes(piece.strip()), tokens + extra
+            if piece and is_complete(piece, block) and (is_table or not language.paragraph_is_english(piece)):
+                blocks[i], repaired = piece, repaired + 1
+                break
+        else:
+            failed += 1
+    return "\n\n".join(blocks), tokens, repaired, failed
+
+
+def translate_section(text: str, label: str, lang: str, model: str) -> tuple[str, int, bool, int]:
+    out, tokens, truncated = _call(
+        TRANSLATE_PROMPT.format(label=label, language=LANGUAGES[lang], text=text), model, 4000
+    )
+    out = strip_meta_notes(out)
+    if lang == "en":
+        return out, tokens, truncated, 1
+    if truncated or not is_complete(out, text):
+        out, extra, _, _ = repair_paragraphs(text, lang, model, tables=True)
+        return out, tokens + extra, False, 2
+    if language.english_share(out) > MAX_ENGLISH_SHARE:
+        out, extra, repaired, _ = repair_paragraphs(out, lang, model)
+        return out, tokens + extra, truncated, 2 if repaired else 1
+    return out, tokens, truncated, 1
+
+
+def translate_lines(lines: list[str], lang: str, model: str) -> tuple[list[str], int]:
+    if lang == "en" or not lines:
+        return list(lines), 0
+    prompt = HEADINGS_PROMPT.format(language=LANGUAGES[lang], n=len(lines), lines="\n".join(lines))
+    out, tokens, _ = _call(prompt, model, 400)
+    got = [re.sub(r"^\s*(?:[-*]|\d+[.)])\s*", "", line).strip().strip('"') for line in out.splitlines() if line.strip()]
+    return (got if len(got) == len(lines) and all(got) else list(lines)), tokens
 
 
 def _call(prompt: str, model: str, max_tokens: int) -> tuple[str, int, bool]:
@@ -373,6 +453,8 @@ def write_document(
     spec, n = DOCUMENT_TYPES[doc_type], len(sources)
     label = f"{spec['label']} on {topic}"
     plan = []
+    names, heading_tokens = translate_lines([t["name"] for t in themes], lang, model)
+    local = dict(zip([t["name"] for t in themes], names))
     for sec in spec["sections"]:
         if sec == THEMES:
             plan += [
@@ -384,14 +466,14 @@ def write_document(
                     "last": False,
                     "theme": t,
                     "heading": spec["theme_prefix"]["en"] + t["name"],
-                    "heading_out": spec["theme_prefix"][lang] + t["name"],
+                    "heading_out": spec["theme_prefix"][lang] + local[t["name"]],
                 }
                 for t in themes
             ]
         else:
             plan.append({**sec, "theme": None, "heading": sec["title"]["en"], "heading_out": sec["title"][lang]})
     outline = "\n".join(f"## {p['heading']}" for p in plan)
-    texts, written, report, used = {}, [], [], 0
+    texts, written, report, used = {}, [], [], heading_tokens
     progress("sections", 0, len(plan))
     for item in [p for p in plan if not p["last"]] + [p for p in plan if p["last"]]:
         prompt = SECTION_PROMPT.format(
@@ -418,8 +500,7 @@ def write_document(
     if lang != "en":
         progress("translate", 0, len(plan))
         for done, item in enumerate(plan, start=1):
-            prompt = TRANSLATE_PROMPT.format(label=label, language=LANGUAGES[lang], text=texts[item["key"]])
-            text, tokens, truncated = _call(prompt, model, 4000)
+            text, tokens, truncated, attempts = translate_section(texts[item["key"]], label, lang, model)
             text, tidied = tidy_section(text.strip())
             used += tokens
             report.append(
@@ -429,6 +510,8 @@ def write_document(
                     "tokens": tokens,
                     "truncated": truncated,
                     "tidied": tidied,
+                    "attempts": attempts,
+                    "english_share": round(language.english_share(text), 3),
                 }
             )
             texts[item["key"]] = text

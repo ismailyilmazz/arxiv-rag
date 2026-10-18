@@ -551,6 +551,8 @@ def test_turkish_documents_are_written_in_english_then_translated(tmp_path, monk
             return "Başlık", 1, "stop"
         if prompt.startswith("Translate the following section"):
             return "Çevrilmiş bölüm metni [1].", 1, "stop"
+        if prompt.startswith("Translate each line below"):
+            return "\n".join(f"Tema {i}" for i, _ in enumerate(prompt.split("\n\n", 1)[1].splitlines(), 1)), 1, "stop"
         return "English section text [1].", 1, "stop"
 
     monkeypatch.setattr(llm, "complete", complete)
@@ -572,6 +574,8 @@ def test_turkish_documents_are_written_in_english_then_translated(tmp_path, monk
     md = out["markdown"]
     assert "## Özet" in md and "## Problem ve Motivasyon" in md and "English section text" not in md
     assert "Çevrilmiş bölüm metni" in md and out["citations"]["focus_drift"]["count"] == 0
+    assert sum(p.startswith("Translate each line below") for p in prompts) == 1 and "İlgili Çalışmalar: Tema 1" in md
+    assert out["citations"]["language"]["english_paragraphs"] == 0
 
 
 def test_english_documents_are_not_translated(tmp_path, monkeypatch):
@@ -654,3 +658,18 @@ def test_force_uses_results_of_rejected_queries(tmp_path, monkeypatch):
         document.select_sources(conn, pipeline, "experts")
     selection = document.select_sources(conn, pipeline, "experts", force=True, n_sources=5)
     assert selection["forced"] and selection["rejected_queries"] and set(A[:5]) <= set(selection["candidate_ids"])
+
+
+def test_turkish_topic_terms_come_from_the_english_translation(tmp_path, monkeypatch):
+    _fake_llm(monkeypatch)
+    conn, pipeline = _world(tmp_path)
+    seen = []
+    original = document.topic_terms
+    monkeypatch.setattr(
+        document, "topic_terms", lambda c, topic, **kw: (seen.append(topic), original(c, topic, **kw))[1]
+    )
+    pipeline.translator, pipeline.translation = (lambda text: "mixture of experts"), "replace"
+    document.select_sources(conn, pipeline, "uzmanlar karışımı", n_sources=8)
+    pipeline.translation = "off"
+    document.select_sources(conn, pipeline, "uzmanlar karışımı", n_sources=8)
+    assert seen == ["mixture of experts", "uzmanlar karışımı"]

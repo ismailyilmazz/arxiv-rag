@@ -12,7 +12,7 @@ from sklearn.metrics import silhouette_score
 
 from arxiv_rag import config
 from arxiv_rag.evaluation import coverage
-from arxiv_rag.generation import cards, citations, llm, scholar, writer
+from arxiv_rag.generation import cards, citations, language, llm, scholar, writer
 from arxiv_rag.search import bm25
 from arxiv_rag.search.related import related
 from arxiv_rag.storage.arxiv_ids import normalize_id
@@ -350,7 +350,9 @@ def select_sources(
     def on_topic(pid, gate):
         return pid in seeds or relevance.get(pid, -2.0) >= gate
 
-    terms = topic_terms(conn, topic)
+    translator = getattr(pipeline, "translator", None)
+    english_topic = translator(topic) if translator and getattr(pipeline, "translation", "off") != "off" else None
+    terms = topic_terms(conn, english_topic or topic)
     texts = {}
     for chunk in [sorted(set(fused) | in_corpus)[i : i + 900] for i in range(0, len(set(fused) | in_corpus), 900)]:
         texts.update(
@@ -562,6 +564,8 @@ def write_from_selection(
     report["focus_drift"] = citations.focus_drift(body, topic, focus)
     report["meta_language"] = citations.meta_language(body)
     report["number_audit"] = citations.number_audit(body, {s["n"]: material_text(s) for s in cited})
+    if lang != "en":
+        report["language"] = language.audit(body)
     markdown = (
         body.rstrip() + "\n\n" + citations.bibliography(cited, lang) + "\n" + citations.further_reading(further, lang)
     )
