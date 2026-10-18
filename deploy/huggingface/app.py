@@ -17,6 +17,7 @@ for key, value in {
     "APP_TRUST_PROXY": "1",
     "APP_PRELOAD": "1",
     "ENCODER_DEVICE": "cpu",
+    "QUERY_TRANSLATION": "replace",
 }.items():
     os.environ.setdefault(key, value)
 

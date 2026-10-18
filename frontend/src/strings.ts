@@ -32,7 +32,8 @@ export const text = {
   topicPlaceholder: "Örneğin: büyük dil modellerinde uzman karışımı (mixture of experts)",
   topicLead:
     "Konunu yaz, ilgili arXiv makalelerini bulalım. Belgenin hangi kaynaklardan yazılacağını sen onaylarsın, sonra her iddiası kaynağına bağlı bir metin hazırlanır.",
-  topicHint: "Türkçe ya da İngilizce yazabilirsin. Enter ile ara, Shift+Enter ile yeni satıra geç.",
+  topicHint:
+    "Türkçe ya da İngilizce yazabilirsin; arXiv makaleleri İngilizce olduğu için Türkçe konular İngilizceye çevrilerek aranır. Enter ile ara, Shift+Enter ile yeni satıra geç.",
   topicMissing: "Önce yukarıdaki kutuya bir konu yaz. Kutudaki gri yazı sadece bir örnek.",
   search: "Makaleleri bul",
   searching: "Aranıyor",
@@ -44,7 +45,9 @@ export const text = {
   focusPlaceholder: "Örneğin: düşük kaynaklı diller, çıkarım maliyeti",
   seedsLegend: "Konuyu en iyi temsil eden makaleleri işaretle",
   found: (count: number, picked: number) => `${count} makale bulundu, ${picked} tanesi seçili.`,
-  seedsHint: "En fazla 5. İşaretlediklerin tam metinden okunur ve kaynak seçimine yön verir.",
+  seedsHint:
+    "En fazla 5. İşaretlediklerin belgenin tek kaynağı değil, pusulası olur: plan onlardan yola çıkıp benzerlerini ve kaynakçalarını da tarayarak yaklaşık 30 kaynak toplar. İşaretlediklerin ayrıca tam metinden okunur.",
+  translatedQuery: (query: string) => `İngilizceye çevrilerek arandı: “${query}”`,
   noResults: "Bu konuda makale bulunamadı. Konuyu daha genel ya da İngilizce terimlerle yaz.",
   weakMatch: "Bu konu korpustaki makalelerle zayıf eşleşiyor; sonuçlar ilgisiz olabilir.",
   forceAnyway: "Yine de plan oluştur",
@@ -54,7 +57,7 @@ export const text = {
   createPlan: "Plan oluştur",
   planHeading: (sources: number, themes: number) => `${sources} kaynak, ${themes} tema`,
   planHint:
-    "Belgeye girmesini istemediğin kaynakların işaretini kaldır. Başlığın altındaki çizgi, makalenin konuya ne kadar yakın olduğunu gösterir.",
+    "Bu kaynaklar konundan türetilen alt aramalarla, seçtiğin makalelerin benzerleri ve kaynakçalarıyla toplandı, sonra birbirine benzerliklerine göre temalara ayrıldı. “Tam metinden okunacak” olanların PDF'i okunur, diğerlerinin özeti kullanılır. Belgeye girmesini istemediklerinin işaretini kaldır; başlığın altındaki çizgi makalenin konuya ne kadar yakın olduğunu gösterir.",
   showSources: "Kaynakları göster",
   edit: "Düzenle",
   deep: "Tam metinden okunacak",

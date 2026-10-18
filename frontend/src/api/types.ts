@@ -17,6 +17,7 @@ export interface SearchResponse {
   query: string;
   accepted: boolean;
   guard_prob: number | null;
+  translated_query?: string | null;
   results: SearchResult[];
 }
 

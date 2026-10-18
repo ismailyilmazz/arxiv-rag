@@ -34,7 +34,7 @@ const plan = {
   forced: false,
 };
 
-function fakeServer(pollsUntilDone = 2, found = results) {
+function fakeServer(pollsUntilDone = 2, found = results, translated: string | null = null) {
   const calls: { url: string; body?: unknown }[] = [];
   const polls: Record<string, number> = {};
   const job = (id: string, kind: string, extra: object) => ({
@@ -45,7 +45,8 @@ function fakeServer(pollsUntilDone = 2, found = results) {
     calls,
     fetch: vi.fn(async (url: string, init?: RequestInit) => {
       calls.push({ url, body: init?.body ? JSON.parse(String(init.body)) : undefined });
-      if (url === "/api/search") return json({ query: "q", accepted: true, guard_prob: 0.9, results: found });
+      if (url === "/api/search")
+        return json({ query: "q", accepted: true, guard_prob: 0.9, translated_query: translated, results: found });
       if (url === "/api/plans") return json({ job_id: "plan-job", position: 1 });
       if (url === "/api/documents") return json({ job_id: "doc-job", position: 1 });
       if (url === "/api/plans/p1") return json(plan);
@@ -177,5 +178,22 @@ describe("App", () => {
     await user.click(edit);
     expect(await screen.findByText(text.waitForJob)).toBeInTheDocument();
     expect(screen.getByText("experts", { selector: ".summary__topic" })).toBeInTheDocument();
+  });
+
+  it("shows the English query when a Turkish topic was translated", async () => {
+    vi.stubGlobal("fetch", fakeServer(2, results, "hallucination detection").fetch);
+    const user = userEvent.setup();
+    render(<App pollMs={5} />);
+    await user.type(screen.getByLabelText(text.topicQuestion), "halüsinasyon tespiti{Enter}");
+    expect(await screen.findByText(text.translatedQuery("hallucination detection"))).toBeInTheDocument();
+  });
+
+  it("does not mention translation for English topics", async () => {
+    vi.stubGlobal("fetch", fakeServer().fetch);
+    const user = userEvent.setup();
+    render(<App pollMs={5} />);
+    await user.type(screen.getByLabelText(text.topicQuestion), "experts{Enter}");
+    await screen.findByText(text.found(results.length, 3));
+    expect(screen.queryByText(/İngilizceye çevrilerek arandı/)).not.toBeInTheDocument();
   });
 });

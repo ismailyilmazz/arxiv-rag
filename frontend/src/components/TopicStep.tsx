@@ -176,6 +176,7 @@ export function TopicStep({ locked, onFound, onPlan, onEdit }: Props) {
         <fieldset className="results" id="results" tabIndex={-1}>
           <legend>{text.seedsLegend}</legend>
           <p className="results__count">{text.found(found.results.length, seeds.length)}</p>
+          {found.translated_query && <p className="hint">{text.translatedQuery(found.translated_query)}</p>}
           <p className="hint">{text.seedsHint}</p>
           {!found.accepted && (
             <div className="notice">

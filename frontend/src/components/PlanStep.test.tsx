@@ -40,7 +40,7 @@ describe("PlanStep", () => {
     render(<Harness onWrite={() => {}} />);
     expect(screen.getByText(text.planHeading(2, 1))).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Routing" })).toBeInTheDocument();
-    expect(screen.getAllByText(text.deep, { exact: false })).toHaveLength(1);
+    expect(screen.getAllByText(text.deep)).toHaveLength(1);
     expect(screen.getByRole("link", { name: "A Survey on MoE" })).toHaveAttribute("target", "_blank");
     expect(screen.getByText(text.dropped(1))).toBeInTheDocument();
   });

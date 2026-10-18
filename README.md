@@ -28,7 +28,8 @@ LLM_MODEL_FAST=openai/gpt-oss-20b
 ARXIV_CONTACT_EMAIL=
 ```
 
-İsteğe bağlı: `LLM_CARD_MODEL`, `LLM_WRITE_MODEL`, `LLM_TPM`, `FULLTEXT_POLICY` (`all`/`cc`), `S2_API_KEY`.
+İsteğe bağlı: `LLM_CARD_MODEL`, `LLM_WRITE_MODEL`, `LLM_TPM`, `FULLTEXT_POLICY` (`all`/`cc`), `S2_API_KEY`,
+`QUERY_TRANSLATION` (`off`/`replace`/`fuse`; Türkçe sorguları aramadan önce İngilizceye çevirir, önerilen `replace`).
 
 Yerel veri (30 binlik örnek, vektörler ve modeller) `notebooks/08_local_bundle.py` çıktısındaki pakettir:
 
