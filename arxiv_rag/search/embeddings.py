@@ -3,6 +3,8 @@ from typing import Optional
 
 import numpy as np
 
+from arxiv_rag import config
+
 
 @dataclass(frozen=True)
 class ModelSpec:
@@ -35,7 +37,9 @@ class Encoder:
 
         self.name = name
         self.spec = MODELS[name]
-        self.model = SentenceTransformer(self.spec.hf_id, device=device, truncate_dim=self.spec.truncate_dim)
+        self.model = SentenceTransformer(
+            self.spec.hf_id, device=device or config.ENCODER_DEVICE, truncate_dim=self.spec.truncate_dim
+        )
         self.model.max_seq_length = max_seq_length
         if self.model.device.type == "cuda":
             self.model.half()
