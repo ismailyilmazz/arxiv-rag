@@ -18,6 +18,9 @@ silinmemelidir: tam korpus vektörleri ve eğitilmiş modeller sadece oradadır.
 | 09 | `09_broad_survey.py` | 04 + 06 | CPU, internet, Secrets | Geniş akışla belge üretimi ya da kuru çalıştırma (`DRY_RUN`), hakem survey'e karşı kapsama | `generations/` (isteğe bağlı otomatik push) |
 
 | 10 | `10_publish_data.py` | 04 + 06 | CPU, internet, Secrets | Sunucu verisini Hugging Face veri deposuna yükler, model sürümünü ve boyutları doğrular | `ismailylmz283/arxiv-rag-data` |
+| 11 | `11_query_translation.py` | 04 + 06 | CPU, internet, Secrets | Türkçe sorguları İngilizceye çevirerek aramayı ölçer (off / replace / fuse) | Karşılaştırma tablosu, `eval/results/*-tr_*.json` |
+
+Notebook 11 için Kaggle **Secrets**: `LLM_API_KEY` (Groq).
 
 Notebook 10 için Kaggle **Secrets**: `HF_TOKEN` (Hugging Face yazma token'ı).
 

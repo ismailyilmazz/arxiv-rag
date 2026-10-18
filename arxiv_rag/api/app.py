@@ -182,6 +182,7 @@ def create_app(
             "search",
             query=body.query[:80],
             accepted=out["accepted"],
+            translated=out.get("translated_query"),
             guard_prob=round(out.get("guard_prob") or 0.0, 3),
             results=len(results),
             ms=round(sum((out.get("timings_ms") or {}).values())),
@@ -190,6 +191,7 @@ def create_app(
             "query": body.query,
             "accepted": out["accepted"],
             "guard_prob": out.get("guard_prob"),
+            "translated_query": out.get("translated_query"),
             "results": results,
             "timings_ms": out.get("timings_ms", {}),
         }

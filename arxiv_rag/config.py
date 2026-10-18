@@ -29,3 +29,4 @@ ARXIV_CONTACT_EMAIL = os.getenv("ARXIV_CONTACT_EMAIL", "")
 LLM_TPM = int(os.getenv("LLM_TPM", "8000"))
 S2_API_KEY = os.getenv("S2_API_KEY", "")
 ENCODER_DEVICE = os.getenv("ENCODER_DEVICE") or None
+QUERY_TRANSLATION = os.getenv("QUERY_TRANSLATION", "off")

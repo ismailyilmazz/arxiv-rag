@@ -25,7 +25,7 @@ class PipelineSearch:
         return [(r["id"], r["score"]) for r in self.last["results"]]
 
 
-def build_search(method: str, vectors_dir, n_papers: int, conn, models_dir=None):
+def build_search(method: str, vectors_dir, n_papers: int, conn, models_dir=None, translation="off", cache=None):
     if method == "pipeline":
         if vectors_dir is None or models_dir is None:
             raise SystemExit("--method pipeline için --vectors-dir ve --models-dir gerekli.")
@@ -33,7 +33,13 @@ def build_search(method: str, vectors_dir, n_papers: int, conn, models_dir=None)
             raise SystemExit("term_df tablosu yok. Önce: python -m scripts.data.build_term_df")
         from arxiv_rag.search.pipeline import SearchPipeline
 
-        pipeline = SearchPipeline.load(conn, vectors_dir, models_dir)
+        pipeline = SearchPipeline.load(conn, vectors_dir, models_dir, translation="off")
+        if translation != "off":
+            if not config.LLM_API_KEY:
+                raise SystemExit("Çeviri için LLM_API_KEY gerekli.")
+            from arxiv_rag.search.translate import QueryTranslator
+
+            pipeline.translator, pipeline.translation = QueryTranslator(cache_path=cache), translation
         return PipelineSearch(pipeline), len(pipeline.index), pipeline.index.meta["model"]
     gate = GATE if method in ("bm25-gate", "hybrid-gate", "lang-rule") else None
     if gate and not bm25.has_term_df(conn):
@@ -78,14 +84,27 @@ def main() -> None:
     p.add_argument("--db", type=Path, default=config.DB_PATH)
     p.add_argument("--queries", type=Path, default=config.EVAL_QUERIES_PATH)
     p.add_argument("--k", type=int, default=10)
+    p.add_argument("--translation", choices=("off", "replace", "fuse"), default="off")
+    p.add_argument("--translation-cache", type=Path, default=None)
+    p.add_argument("--langs", nargs="*", default=None, help="Sadece bu dillerdeki sorgular, örneğin: --langs tr")
     args = p.parse_args()
 
     conn = connect(args.db)
     n_papers = conn.execute("SELECT COUNT(*) FROM papers").fetchone()[0]
-    search, searched, model = build_search(args.method, args.vectors_dir, n_papers, conn, args.models_dir)
+    if args.translation != "off" and args.method != "pipeline":
+        raise SystemExit("--translation sadece --method pipeline ile kullanılır.")
+    search, searched, model = build_search(
+        args.method, args.vectors_dir, n_papers, conn, args.models_dir, args.translation, args.translation_cache
+    )
     label = args.method if model is None else f"{args.method}-{model}"
+    if args.translation != "off":
+        label += f"-ceviri-{args.translation}"
     with open(args.queries, encoding="utf-8") as f:
         queries = [json.loads(line) for line in f if line.strip()]
+    if args.langs:
+        queries = [q for q in queries if q["lang"] in args.langs]
+        label += "-" + "-".join(args.langs)
+    translations = []
 
     targets = {q["target_id"] for q in queries if q["target_id"]}
     present = {
@@ -107,6 +126,8 @@ def main() -> None:
         last = getattr(search, "last", None)
         if last is not None:
             accepted.setdefault(key, []).append(last["accepted"])
+            if last.get("translated_query"):
+                translations.append({"qid": q["qid"], "query": q["query"], "translated": last["translated_query"]})
             for stage, ms in last["timings_ms"].items():
                 stage_times.setdefault(stage, []).append(ms)
         if q["target_id"] is None:
@@ -126,6 +147,15 @@ def main() -> None:
         "groups": {key: summarize(ranks, args.k) for key, ranks in sorted(groups.items())},
         "offtopic_top1_score": {key: round(statistics.mean(s), 3) for key, s in sorted(offtopic_scores.items())},
     }
+    if args.translation != "off":
+        translator = search.pipeline.translator
+        report["translation"] = {
+            "mode": args.translation,
+            "translated_queries": len(translations),
+            "tokens": translator.tokens,
+            "failures": translator.failures,
+            "examples": translations,
+        }
     if accepted:
         report["guard_accept_rate"] = {key: round(sum(v) / len(v), 4) for key, v in sorted(accepted.items())}
         report["median_stage_ms"] = {stage: round(statistics.median(v), 1) for stage, v in stage_times.items()}
@@ -143,6 +173,11 @@ def main() -> None:
     if accepted:
         print("\nBekçinin kabul oranı:", report["guard_accept_rate"])
         print("Aşamaların ortanca süresi (ms):", report["median_stage_ms"])
+    if "translation" in report:
+        t = report["translation"]
+        print(
+            f"Çeviri: {t['mode']} | çevrilen sorgu: {t['translated_queries']} | token: {t['tokens']} | hata: {t['failures']}"
+        )
 
     config.RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     out = config.RESULTS_DIR / f"{label}_{searched}.json"
