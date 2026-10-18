@@ -184,13 +184,33 @@ def translate_section(text: str, label: str, lang: str, model: str) -> tuple[str
     return out, tokens, truncated, 1
 
 
+def _heading_lines(text: str) -> list[str]:
+    lines = []
+    for line in text.splitlines():
+        line = re.sub(r"^\s*(?:[-*]|\d+[.)])\s*", "", line).strip().strip("*").strip().strip('"').strip()
+        if line and not line.endswith(":"):
+            lines.append(line)
+    return lines
+
+
+def _ask_headings(lines: list[str], lang: str, model: str) -> tuple[list[str], int]:
+    prompt = HEADINGS_PROMPT.format(language=LANGUAGES[lang], n=len(lines), lines="\n".join(lines))
+    text, tokens, _ = llm.complete(prompt, model=model, max_tokens=800)
+    return _heading_lines(text), tokens
+
+
 def translate_lines(lines: list[str], lang: str, model: str) -> tuple[list[str], int]:
     if lang == "en" or not lines:
         return list(lines), 0
-    prompt = HEADINGS_PROMPT.format(language=LANGUAGES[lang], n=len(lines), lines="\n".join(lines))
-    out, tokens, _ = _call(prompt, model, 400)
-    got = [re.sub(r"^\s*(?:[-*]|\d+[.)])\s*", "", line).strip().strip('"') for line in out.splitlines() if line.strip()]
-    return (got if len(got) == len(lines) and all(got) else list(lines)), tokens
+    got, tokens = _ask_headings(lines, lang, model)
+    if len(got) == len(lines):
+        return got, tokens
+    result = []
+    for line in lines:
+        single, extra = _ask_headings([line], lang, model)
+        tokens += extra
+        result.append(single[0] if len(single) == 1 else line)
+    return result, tokens
 
 
 def _call(prompt: str, model: str, max_tokens: int) -> tuple[str, int, bool]:
@@ -260,10 +280,11 @@ DOCUMENT_TYPES = {
                 "Comparison and Discussion",
                 "Karşılaştırma ve Tartışma",
                 "setup",
-                "Compare the representative works across the themes. Include one markdown table with the columns "
-                "Work, Year, Key idea, Setting or scale and Main result, with at least one row for every theme, "
-                "where every row cites its work. Then discuss the trade-offs.",
-                2500,
+                "Compare the representative works across the themes. Include one compact markdown table with the "
+                "columns Work, Year, Key idea, Setting or scale and Main result: one row for every theme and at most "
+                "8 rows, every row citing its work, and every cell under 12 words. After the table, write two short "
+                "paragraphs that discuss the trade-offs between the approaches.",
+                3500,
             ),
             section(
                 "open",
@@ -474,6 +495,18 @@ def write_document(
             plan.append({**sec, "theme": None, "heading": sec["title"]["en"], "heading_out": sec["title"][lang]})
     outline = "\n".join(f"## {p['heading']}" for p in plan)
     texts, written, report, used = {}, [], [], heading_tokens
+    if lang != "en" and themes:
+        report.append(
+            {
+                "section": "translate:headings",
+                "source": None,
+                "tokens": heading_tokens,
+                "truncated": False,
+                "tidied": False,
+                "translated": sum(local[t["name"]] != t["name"] for t in themes),
+                "of": len(themes),
+            }
+        )
     progress("sections", 0, len(plan))
     for item in [p for p in plan if not p["last"]] + [p for p in plan if p["last"]]:
         prompt = SECTION_PROMPT.format(

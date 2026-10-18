@@ -185,6 +185,8 @@ def test_proposal_uses_themes_as_related_work_and_writes_abstract_last(tmp_path,
     original = llm.complete
 
     def complete(prompt, model, max_tokens):
+        if prompt.startswith("Translate each line below"):
+            return prompt.split("\n\n", 1)[1], 1, "stop"
         m = re.search(r"Now write: the section \"(.*)\"", prompt)
         if m:
             targets.append(m.group(1))
@@ -399,7 +401,8 @@ def test_scholar_failure_does_not_stop_generation(tmp_path, monkeypatch):
         n_sources=8,
         fetcher=lambda pid: fulltext.FullText(pid, "html", []),
     )
-    assert out["scholar"]["ok"] is False and "network unreachable" in out["scholar"]["error"]
+    errors = out["scholar"]["anchor_errors"]
+    assert errors and all("network unreachable" in e for e in errors)
     assert out["markdown"].startswith("# Review Title")
 
 
@@ -575,6 +578,8 @@ def test_turkish_documents_are_written_in_english_then_translated(tmp_path, monk
     assert "## Özet" in md and "## Problem ve Motivasyon" in md and "English section text" not in md
     assert "Çevrilmiş bölüm metni" in md and out["citations"]["focus_drift"]["count"] == 0
     assert sum(p.startswith("Translate each line below") for p in prompts) == 1 and "İlgili Çalışmalar: Tema 1" in md
+    headings = next(r for r in out["sections"] if r["section"] == "translate:headings")
+    assert headings["translated"] == headings["of"] >= 1
     assert out["citations"]["language"]["english_paragraphs"] == 0
 
 
@@ -673,3 +678,46 @@ def test_turkish_topic_terms_come_from_the_english_translation(tmp_path, monkeyp
     pipeline.translation = "off"
     document.select_sources(conn, pipeline, "uzmanlar karışımı", n_sources=8)
     assert seen == ["mixture of experts", "uzmanlar karışımı"]
+
+
+def test_old_style_ids_are_resolved_before_asking_references(monkeypatch):
+    urls = []
+
+    def fake_request(url, payload=None, *args, **kwargs):
+        urls.append((url, payload))
+        if "/paper/batch" in url:
+            return [{"paperId": "abc123"}]
+        return {"data": [{"citedPaper": {"externalIds": {"ArXiv": "1701.06538"}, "citationCount": 3, "year": 2017}}]}
+
+    monkeypatch.setattr(scholar, "references", REAL_REFERENCES)
+    monkeypatch.setattr(scholar, "_request", fake_request)
+    assert scholar.references("quant-ph/0312011") == [{"id": "1701.06538", "citations": 3, "year": 2017}]
+    assert urls[0][1] == {"ids": ["ARXIV:quant-ph/0312011"]} and "/paper/abc123/references" in urls[1][0]
+    urls.clear()
+    scholar.references("2101.03961")
+    assert len(urls) == 1 and "/paper/ARXIV:2101.03961/references" in urls[0][0]
+
+
+def test_one_failing_anchor_does_not_cancel_the_others(tmp_path, monkeypatch):
+    _fake_llm(monkeypatch)
+    conn, pipeline = _world(tmp_path)
+    asked = []
+
+    def refs(pid, limit=200):
+        asked.append(pid)
+        if pid == A[0]:
+            raise OSError("HTTP Error 404: Not Found")
+        return []
+
+    monkeypatch.setattr(scholar, "references", refs)
+    out = document.build_document(
+        conn,
+        connect(tmp_path / "c.db"),
+        pipeline,
+        "experts",
+        seed_ids=[A[0], A[1]],
+        n_sources=8,
+        fetcher=lambda pid: fulltext.FullText(pid, "html", []),
+    )
+    assert asked == [A[0], A[1]] and len(out["scholar"]["anchor_errors"]) == 1
+    assert "error" not in out["scholar"] and out["scholar"]["ok"] is True

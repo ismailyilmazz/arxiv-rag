@@ -117,9 +117,14 @@ def test_ordinary_parentheses_survive():
     assert writer.strip_meta_notes(text) == text
 
 
-def test_theme_names_are_translated_or_left_alone(monkeypatch):
-    monkeypatch.setattr(llm, "complete", Script("1. Yöntemler\n2. Benchmarklar"))
+def test_theme_names_are_translated(monkeypatch):
+    monkeypatch.setattr(llm, "complete", Script("Çeviriler:\n1. **Yöntemler**\n2. Benchmarklar"))
     assert writer.translate_lines(["Methods", "Benchmarks"], "tr", "m") == (["Yöntemler", "Benchmarklar"], 100)
-    monkeypatch.setattr(llm, "complete", Script("Yöntemler"))
-    assert writer.translate_lines(["Methods", "Benchmarks"], "tr", "m")[0] == ["Methods", "Benchmarks"]
     assert writer.translate_lines(["Methods"], "en", "m") == (["Methods"], 0)
+
+
+def test_heading_count_mismatch_falls_back_to_one_by_one(monkeypatch):
+    fake = Script("Yöntemler", "Yöntemler", "")
+    monkeypatch.setattr(llm, "complete", fake)
+    names, tokens = writer.translate_lines(["Methods", "Benchmarks"], "tr", "m")
+    assert names == ["Yöntemler", "Benchmarks"] and tokens == 300 and len(fake.prompts) == 3

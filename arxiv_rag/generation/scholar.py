@@ -57,8 +57,18 @@ def batch(ids: list[str]) -> dict[str, dict]:
     return out
 
 
+def paper_id(pid: str):
+    data = _request(f"{API}/paper/batch?fields=externalIds", {"ids": [f"ARXIV:{pid}"]}) or []
+    return (data[0] or {}).get("paperId") if data else None
+
+
 def references(pid: str, limit: int = 200) -> list[dict]:
-    data = _request(f"{API}/paper/ARXIV:{pid}/references?fields={FIELDS}&limit={limit}") or {}
+    key = f"ARXIV:{pid}"
+    if "/" in pid:
+        key = paper_id(pid)
+        if not key:
+            return []
+    data = _request(f"{API}/paper/{key}/references?fields={FIELDS}&limit={limit}") or {}
     out = []
     for row in data.get("data") or []:
         paper = row.get("citedPaper") or {}

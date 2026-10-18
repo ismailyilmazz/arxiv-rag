@@ -20,7 +20,7 @@ from arxiv_rag.storage.tex import clean_tex
 
 EXPAND_PROMPT = """Topic: {topic}
 
-Write 5 short English search queries (3 to 8 words each) that together cover the subtopics a literature survey on this topic must include: core methods, important variants, training and data, systems and efficiency, evaluation and limitations.
+Write 5 short English search queries (3 to 8 words each) that together cover the subtopics a literature survey on this topic must include. Choose subtopics that fit the topic's own field, for example foundations and core ideas, main approaches or variants, key results or evidence, experiments, systems or applications, and limitations or open problems. Mention training data or machine learning only if the topic itself is about machine learning.
 Return JSON: {{"queries": ["...", "..."]}}"""
 
 THEME_PROMPT = """Topic: {topic}
@@ -337,9 +337,16 @@ def select_sources(
     s2 = {"ok": False, "anchors": [], "reference_additions": 0, "references_rejected": 0, "with_citations": 0}
     refs, in_corpus = [], set()
     if use_scholar and fused:
+        s2["anchors"] = seeds or [pid for pid, _ in sorted(fused.items(), key=lambda kv: -kv[1])[:3]]
+        failures = []
+        for pid in s2["anchors"]:
+            try:
+                refs.append(scholar.references(pid))
+            except Exception as e:
+                failures.append(f"{pid}: {type(e).__name__}: {e}"[:200])
+        if failures:
+            s2["anchor_errors"] = failures
         try:
-            s2["anchors"] = seeds or [pid for pid, _ in sorted(fused.items(), key=lambda kv: -kv[1])[:3]]
-            refs = [scholar.references(pid) for pid in s2["anchors"]]
             in_corpus = coverage.in_corpus(conn, {r["id"] for rs in refs for r in rs}) - excluded
         except Exception as e:
             s2["error"], refs = f"{type(e).__name__}: {e}"[:200], []
