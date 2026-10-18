@@ -6,7 +6,6 @@ SERVING_SKLEARN = "1.6.1"
 # %%
 !git clone {REPO_URL} /kaggle/working/arxiv-rag
 %cd /kaggle/working/arxiv-rag
-!pip install -q "huggingface_hub==2.0.0"
 
 # %%
 import datetime
@@ -26,9 +25,10 @@ from sklearn.exceptions import InconsistentVersionWarning
 
 def has_term_df(path):
     try:
-        with sqlite3.connect(path) as c:
+        with sqlite3.connect(f"file:{path}?mode=ro&immutable=1", uri=True) as c:
             return c.execute("SELECT 1 FROM sqlite_master WHERE name = 'term_df'").fetchone() is not None
-    except sqlite3.Error:
+    except sqlite3.Error as error:
+        print(f"Açılamadı: {path} ({error})")
         return False
 
 
@@ -42,10 +42,22 @@ def saved_sklearn_version(path):
     return sklearn.__version__
 
 
-dbs = [p for p in glob.glob("/kaggle/input/**/papers_full.db", recursive=True) if has_term_df(p)]
+print("Kaggle girdileri:")
+for root, dirs, files in os.walk("/kaggle/input"):
+    depth = root[len("/kaggle/input"):].count(os.sep)
+    print("  " * depth + (os.path.basename(root) or "/kaggle/input") + "/" + (f"  ({len(files)} dosya)" if files else ""))
+    if depth >= 3:
+        dirs[:] = []
+
+all_dbs = glob.glob("/kaggle/input/**/papers_full.db", recursive=True)
+dbs = [p for p in all_dbs if has_term_df(p)]
 metas = glob.glob("/kaggle/input/**/vectors_full/meta.json", recursive=True)
 rankers = glob.glob("/kaggle/input/**/models/ranker.txt", recursive=True)
-assert dbs and metas and rankers, "Girdiler eksik: 04 (vektörler) ve 06 (term_df'li veritabanı ve modeller) notebook'larını Add Input ile ekle."
+print("papers_full.db bulunanlar:", all_dbs, "| term_df içerenler:", dbs)
+missing = [name for name, found in (("term_df'li papers_full.db (06'nın çıktısı)", dbs),
+                                    ("vectors_full/meta.json (04'ün çıktısı)", metas),
+                                    ("models/ranker.txt (06'nın çıktısı)", rankers)) if not found]
+assert not missing, "Bulunamadı: " + "; ".join(missing) + ". Yukarıdaki girdi listesini kontrol et."
 DB, VEC, MODELS = dbs[0], os.path.dirname(metas[0]), os.path.dirname(rankers[0])
 
 UPLOADS = {"papers.db": DB}
