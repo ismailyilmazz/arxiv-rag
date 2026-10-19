@@ -187,6 +187,8 @@ def test_proposal_uses_themes_as_related_work_and_writes_abstract_last(tmp_path,
     def complete(prompt, model, max_tokens):
         if prompt.startswith("Translate each line below"):
             return prompt.split("\n\n", 1)[1], 1, "stop"
+        if prompt.startswith("Translate this heading"):
+            return prompt.split(": ", 1)[1].splitlines()[0], 1, "stop"
         m = re.search(r"Now write: the section \"(.*)\"", prompt)
         if m:
             targets.append(m.group(1))
@@ -261,7 +263,9 @@ def test_scholar_parses_batch_and_references(monkeypatch):
     monkeypatch.setattr(scholar, "_request", fake)
     monkeypatch.setattr(scholar, "batch", REAL_BATCH)
     monkeypatch.setattr(scholar, "references", REAL_REFERENCES)
-    assert scholar.batch(["2101.03961", "9999.99999"]) == {"2101.03961": {"citations": 5000, "year": 2021}}
+    assert scholar.batch(["2101.03961", "9999.99999"]) == {
+        "2101.03961": {"citations": 5000, "year": 2021, "review": False}
+    }
     assert scholar.references("2101.03961") == [{"id": "1701.06538", "citations": 3000, "year": 2017}]
 
 
@@ -721,3 +725,148 @@ def test_one_failing_anchor_does_not_cancel_the_others(tmp_path, monkeypatch):
     )
     assert asked == [A[0], A[1]] and len(out["scholar"]["anchor_errors"]) == 1
     assert "error" not in out["scholar"] and out["scholar"]["ok"] is True
+
+
+def _bilingual_llm(monkeypatch, prompts):
+    _fake_llm(monkeypatch)
+    base_chat = llm.chat
+
+    def chat(prompt, model, **kw):
+        prompts.append(prompt)
+        if "clusters of paper titles" in prompt:
+            clusters = sorted(int(c) for c in re.findall(r"Cluster (\d+):", prompt))
+            local = '"name_local"' in prompt
+            themes = [
+                {"cluster": c, "name": f"Theme {c}", "description": "d", "off_topic": False}
+                | ({"name_local": f"Tema {c}"} if local else {})
+                for c in clusters
+            ]
+            return {"themes": themes, "order": clusters}, 40
+        if "technical terms of the field" in prompt:
+            return {"terms": [{"en": "section text", "target": "bölüm metni"}]}, 20
+        return base_chat(prompt, model, **kw)
+
+    def complete(prompt, model, max_tokens):
+        prompts.append(prompt)
+        if "Return only the title" in prompt:
+            return "Başlık", 1, "stop"
+        if prompt.startswith("Translate the following section"):
+            return "Çevrilmiş bölüm metni [1].", 1, "stop"
+        return "English section text [1].", 1, "stop"
+
+    monkeypatch.setattr(llm, "chat", chat)
+    monkeypatch.setattr(llm, "complete", complete)
+
+
+def test_turkish_plan_shows_theme_names_in_both_languages(tmp_path, monkeypatch):
+    prompts = []
+    _bilingual_llm(monkeypatch, prompts)
+    conn, pipeline = _world(tmp_path)
+    view = document.build_document(
+        conn, connect(tmp_path / "c.db"), pipeline, "experts", lang="tr", n_sources=8, dry_run=True
+    )
+    assert all(t["name"].startswith("Tema ") and t["name_en"].startswith("Theme ") for t in view["themes"])
+    english = document.build_document(conn, connect(tmp_path / "d.db"), pipeline, "experts", n_sources=8, dry_run=True)
+    assert all(t["name"] == t["name_en"] for t in english["themes"])
+    assert sum('"name_local"' in p for p in prompts) == 1
+
+
+def test_turkish_document_uses_plan_names_keeps_the_english_draft_and_a_glossary(tmp_path, monkeypatch):
+    prompts = []
+    _bilingual_llm(monkeypatch, prompts)
+    conn, pipeline = _world(tmp_path)
+    out = document.build_document(
+        conn,
+        connect(tmp_path / "c.db"),
+        pipeline,
+        "experts",
+        lang="tr",
+        n_sources=8,
+        fetcher=lambda pid: fulltext.FullText(pid, "html", []),
+    )
+    assert not any(p.startswith(("Translate each line below", "Translate this heading")) for p in prompts)
+    headings = next(r for r in out["sections"] if r["section"] == "translate:headings")
+    assert headings["translated"] == headings["of"] == headings["from_plan"] >= 1
+    assert "## Tema " in out["markdown"] and "## Theme " not in out["markdown"]
+    draft = out["draft"]
+    assert all(s["text"] == "English section text [1]." for s in draft["sections"])
+    assert {s["heading_out"] for s in draft["sections"]} >= {"Giriş", "Sonuç"} and draft["title"] == "Başlık"
+    assert draft["glossary"]["section text"] == "bölüm metni" and len(draft["titles"]) == out["screened"]
+    translating = [p for p in prompts if p.startswith("Translate the following section")]
+    assert translating and all("section text = bölüm metni" in p and "Theme 0 = Tema 0" in p for p in translating)
+    assert out["citations"]["terms"]["terms"] == len(draft["glossary"])
+    assert out["citations"]["language"]["english_lines"] == 0
+    assert all(t["name_local"].startswith("Tema ") for t in out["themes"])
+
+
+def test_english_document_keeps_a_draft_without_translation(tmp_path, monkeypatch):
+    prompts = []
+    _bilingual_llm(monkeypatch, prompts)
+    conn, pipeline = _world(tmp_path)
+    out = document.build_document(
+        conn,
+        connect(tmp_path / "c.db"),
+        pipeline,
+        "experts",
+        n_sources=8,
+        fetcher=lambda pid: fulltext.FullText(pid, "html", []),
+    )
+    assert out["draft"]["lang"] == "en" and out["draft"]["glossary"] == {}
+    assert not any("technical terms of the field" in p for p in prompts) and "terms" not in out["citations"]
+
+
+def test_review_typed_papers_count_as_surveys():
+    scores = {"a": 0.9, "b": 0.8, "c": 0.7, "d": 0.6}
+    titles = {p: f"Plain title {p}" for p in scores}
+    picked, moved = document.screen(scores, [], 3, titles, reviews={"a", "b", "c"})
+    assert picked == ["a", "b", "d"] and moved == ["c"]
+    assert document.screen(scores, [], 3, titles)[0] == ["a", "b", "c"]
+
+
+def test_anchor_reference_counts_and_review_types_are_reported(tmp_path, monkeypatch):
+    _fake_llm(monkeypatch)
+    conn, pipeline = _world(tmp_path)
+    monkeypatch.setattr(
+        scholar,
+        "references",
+        lambda pid, limit=200: [{"id": A[5], "citations": 10, "year": 2020}, {"id": "9999.99999", "citations": 1}]
+        if pid == A[0]
+        else [],
+    )
+    monkeypatch.setattr(
+        scholar, "batch", lambda ids: {pid: {"citations": 5, "year": 2020, "review": pid == A[3]} for pid in ids}
+    )
+    out = document.build_document(
+        conn, connect(tmp_path / "c.db"), pipeline, "experts", seed_ids=[A[0], A[1]], n_sources=8, dry_run=True
+    )
+    s2 = out["scholar"]
+    assert s2["anchor_references"] == {
+        A[0]: {"arxiv_linked": 2, "in_corpus": 1},
+        A[1]: {"arxiv_linked": 0, "in_corpus": 0},
+    }
+    assert s2["review_typed"] == 1
+
+
+def test_scholar_batch_reads_review_type(monkeypatch):
+    urls = []
+
+    def fake(url, payload=None, retries=5):
+        urls.append(url)
+        return [{"citationCount": 1, "year": 2002, "publicationTypes": ["Review", "JournalArticle"]}]
+
+    monkeypatch.setattr(scholar, "_request", fake)
+    monkeypatch.setattr(scholar, "batch", REAL_BATCH)
+    assert scholar.batch(["quant-ph/0101098"]) == {"quant-ph/0101098": {"citations": 1, "year": 2002, "review": True}}
+    assert "publicationTypes" in urls[0]
+
+
+def test_review_typed_seeds_and_deep_sources_never_move():
+    scores = {"s": 0.5, "a": 0.9, "b": 0.8, "c": 0.7}
+    titles = {p: f"A survey of topic {p}" for p in scores}
+    picked, moved = document.screen(scores, ["s"], 4, titles, reviews=set(scores))
+    assert picked[0] == "s" and "s" not in moved and moved == ["c"]
+    vectors = np.eye(4, dtype=np.float32)
+    deep = document.pick_deep(
+        [{"ids": ["s", "a"]}, {"ids": ["b"]}], ["s", "a", "b"], vectors[:3], ["s"], 3, reviews={"s"}
+    )
+    assert deep[0] == "s"

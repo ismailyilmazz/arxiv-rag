@@ -8,6 +8,7 @@ from arxiv_rag.storage.arxiv_ids import normalize_id
 
 API = "https://api.semanticscholar.org/graph/v1"
 FIELDS = "externalIds,citationCount,year"
+BATCH_FIELDS = FIELDS + ",publicationTypes"
 MIN_INTERVAL = 1.1
 _last = [0.0]
 
@@ -50,10 +51,14 @@ def batch(ids: list[str]) -> dict[str, dict]:
     out = {}
     for i in range(0, len(ids), 500):
         chunk = ids[i : i + 500]
-        data = _request(f"{API}/paper/batch?fields={FIELDS}", {"ids": [f"ARXIV:{pid}" for pid in chunk]}) or []
+        data = _request(f"{API}/paper/batch?fields={BATCH_FIELDS}", {"ids": [f"ARXIV:{pid}" for pid in chunk]}) or []
         for pid, item in zip(chunk, data):
             if item:
-                out[pid] = {"citations": int(item.get("citationCount") or 0), "year": item.get("year")}
+                out[pid] = {
+                    "citations": int(item.get("citationCount") or 0),
+                    "year": item.get("year"),
+                    "review": "Review" in (item.get("publicationTypes") or []),
+                }
     return out
 
 

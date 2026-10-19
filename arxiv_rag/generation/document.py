@@ -28,8 +28,11 @@ THEME_PROMPT = """Topic: {topic}
 These are clusters of paper titles collected for a literature survey on this topic:
 {clusters}
 
-For every cluster give a short theme name (2 to 6 words) and one sentence that describes what unites its papers. Mark a cluster as off_topic when most of its papers are unrelated to the topic. Also give the order in which the themes should be presented in the survey.
-Return JSON: {{"themes": [{{"cluster": 0, "name": "...", "description": "...", "off_topic": false}}], "order": [0, 1]}}"""
+For every cluster give a short theme name (2 to 6 words) and one sentence that describes what unites its papers.{local_rule} Mark a cluster as off_topic when most of its papers are unrelated to the topic. Also give the order in which the themes should be presented in the survey.
+Return JSON: {{"themes": [{{"cluster": 0, "name": "...",{local_field} "description": "...", "off_topic": false}}], "order": [0, 1]}}"""
+
+LOCAL_RULE = ' Also give "name_local": the same theme name in natural {language}, keeping only acronyms and model names in English.'
+LOCAL_FIELD = ' "name_local": "...",'
 
 _CUE = re.compile(r"\b(we|our|this paper|this work|propose|introduce|achiev|outperform)\w*|\d", re.IGNORECASE)
 
@@ -79,6 +82,10 @@ def is_survey(title: str) -> bool:
     return bool(_SURVEY.search(title or ""))
 
 
+def survey_like(pid: str, titles: dict, reviews=frozenset()) -> bool:
+    return pid in reviews or is_survey(titles.get(pid, ""))
+
+
 def citation_scores(info: dict[str, dict], now_year: int) -> dict[str, float]:
     per_year = {pid: d["citations"] / max(1, now_year - (d.get("year") or now_year) + 1) for pid, d in info.items()}
     top = max((math.log1p(v) for v in per_year.values()), default=0.0)
@@ -105,7 +112,12 @@ def add_references(
 
 
 def screen(
-    scores: dict[str, float], seeds: list[str], n_sources: int, titles: dict[str, str] = None, max_surveys: int = 2
+    scores: dict[str, float],
+    seeds: list[str],
+    n_sources: int,
+    titles: dict[str, str] = None,
+    max_surveys: int = 2,
+    reviews=frozenset(),
 ) -> tuple[list[str], list[str]]:
     titles = titles or {}
     picked, moved, surveys = [], [], 0
@@ -114,7 +126,7 @@ def screen(
             continue
         if len(seeds) + len(picked) >= n_sources:
             break
-        if is_survey(titles.get(pid, "")):
+        if survey_like(pid, titles, reviews):
             if surveys >= max_surveys:
                 moved.append(pid)
                 continue
@@ -185,19 +197,20 @@ def backfill(
     n_target: int,
     titles: dict[str, str],
     max_surveys: int = 2,
+    reviews=frozenset(),
 ) -> list[str]:
     kept = [pid for t in themes for pid in t["ids"]]
     need = n_target - len(kept)
     if need <= 0 or not themes:
         return []
-    surveys = sum(is_survey(titles.get(p, "")) for p in kept)
+    surveys = sum(survey_like(p, titles, reviews) for p in kept)
     extra = []
     for pid, _ in sorted(scores.items(), key=lambda kv: -kv[1]):
         if len(extra) >= need:
             break
         if pid in used or pid in kept:
             continue
-        if is_survey(titles.get(pid, "")):
+        if survey_like(pid, titles, reviews):
             if surveys >= max_surveys:
                 continue
             surveys += 1
@@ -256,13 +269,20 @@ def cluster(vectors: np.ndarray, k_range: tuple[int, int] = (3, 6), seed: int = 
 
 
 def name_themes(
-    topic: str, ids: list[str], labels: np.ndarray, titles: dict[str, str], model: str
+    topic: str, ids: list[str], labels: np.ndarray, titles: dict[str, str], model: str, lang: str = "en"
 ) -> tuple[list[dict], int]:
     clusters = "\n".join(
         f"Cluster {c}:\n" + "\n".join([f"- {titles[pid]}" for pid, lab in zip(ids, labels) if lab == c][:12])
         for c in sorted(set(labels.tolist()))
     )
-    data, tokens = llm.chat(THEME_PROMPT.format(topic=topic, clusters=clusters), model=model, max_tokens=1200)
+    local = lang != "en"
+    prompt = THEME_PROMPT.format(
+        topic=topic,
+        clusters=clusters,
+        local_rule=LOCAL_RULE.format(language=writer.LANGUAGES[lang]) if local else "",
+        local_field=LOCAL_FIELD if local else "",
+    )
+    data, tokens = llm.chat(prompt, model=model, max_tokens=1600 if local else 1200)
     present = sorted(set(labels.tolist()))
     named = {int(t["cluster"]): t for t in data.get("themes", []) if str(t.get("cluster", "")).lstrip("-").isdigit()}
     raw = [int(c) for c in data.get("order", []) if str(c).lstrip("-").isdigit() and int(c) in present]
@@ -276,6 +296,7 @@ def name_themes(
             {
                 "cluster": c,
                 "name": str(t.get("name") or f"Theme {c + 1}").strip(),
+                "name_local": str(t.get("name_local") or "").strip() if local else "",
                 "description": str(t.get("description") or "").strip(),
                 "ids": [pid for pid, lab in zip(ids, labels) if lab == c],
             }
@@ -290,6 +311,7 @@ def pick_deep(
     seeds: list[str],
     max_deep: int,
     titles: dict[str, str] = None,
+    reviews=frozenset(),
 ) -> list[str]:
     titles = titles or {}
     deep = [s for s in seeds if s in ids][:max_deep]
@@ -299,7 +321,7 @@ def pick_deep(
             break
         if any(pid in deep for pid in theme["ids"]):
             continue
-        members = [pid for pid in theme["ids"] if pid in row and not is_survey(titles.get(pid, ""))]
+        members = [pid for pid in theme["ids"] if pid in row and not survey_like(pid, titles, reviews)]
         if not members:
             continue
         centroid = vectors[[row[pid] for pid in members]].mean(axis=0)
@@ -338,10 +360,11 @@ def select_sources(
     refs, in_corpus = [], set()
     if use_scholar and fused:
         s2["anchors"] = seeds or [pid for pid, _ in sorted(fused.items(), key=lambda kv: -kv[1])[:3]]
-        failures = []
+        failures, by_anchor = [], {}
         for pid in s2["anchors"]:
             try:
-                refs.append(scholar.references(pid))
+                by_anchor[pid] = scholar.references(pid)
+                refs.append(by_anchor[pid])
             except Exception as e:
                 failures.append(f"{pid}: {type(e).__name__}: {e}"[:200])
         if failures:
@@ -350,6 +373,10 @@ def select_sources(
             in_corpus = coverage.in_corpus(conn, {r["id"] for rs in refs for r in rs}) - excluded
         except Exception as e:
             s2["error"], refs = f"{type(e).__name__}: {e}"[:200], []
+        s2["anchor_references"] = {
+            pid: {"arxiv_linked": len(rs), "in_corpus": len({r["id"] for r in rs} & in_corpus)}
+            for pid, rs in by_anchor.items()
+        }
     relevance, base = topical_relevance(conn, pipeline.index, fused, seeds, in_corpus)
     gate_ref = float(np.percentile(base, 25)) if base else -2.0
     gate_keep = float(np.percentile(base, 10)) if base else -2.0
@@ -377,7 +404,7 @@ def select_sources(
     def trusted(pid):
         return on_topic(pid, gate_ref) or lexical(pid)
 
-    cite = {}
+    cite, reviews = {}, set()
     if use_scholar and fused and "error" not in s2:
         try:
             allowed = {pid for pid in in_corpus if trusted(pid)}
@@ -386,7 +413,8 @@ def select_sources(
             s2["reference_additions"] = add_references(fused, refs, allowed, excluded | set(seeds))
             info = scholar.batch(list(fused))
             cite = {pid: v for pid, v in citation_scores(info, datetime.now().year).items() if trusted(pid)}
-            s2.update(ok=True, with_citations=len(info))
+            reviews = {pid for pid, v in info.items() if v.get("review")}
+            s2.update(ok=True, with_citations=len(info), review_typed=len(reviews))
         except Exception as e:
             s2["error"] = f"{type(e).__name__}: {e}"[:200]
     s2["relevance_gates"] = {"references": round(gate_ref, 4), "keep": round(gate_keep, 4)}
@@ -401,21 +429,23 @@ def select_sources(
             f"SELECT id, title FROM papers WHERE id IN ({','.join('?' * len(pool[i : i + 900]))})", pool[i : i + 900]
         )
     }
-    screened, moved = screen(on_topic_scores, seeds, n_sources, titles)
+    screened, moved = screen(on_topic_scores, seeds, n_sources, titles, reviews=reviews)
     ids, vectors = vectors_for(conn, pipeline.index, screened)
     if not ids:
         raise ValueError("Bu konu için yeterli makale bulunamadı (sorgular reddedildi ya da sonuç çıkmadı).")
     for pid in ids:
         titles.setdefault(pid, conn.execute("SELECT title FROM papers WHERE id = ?", (pid,)).fetchone()[0])
     labels = merge_small(cluster(vectors), vectors)
-    themes, tokens["themes"] = name_themes(subject, ids, labels, {pid: titles[pid] for pid in ids}, write_model)
+    themes, tokens["themes"] = name_themes(subject, ids, labels, {pid: titles[pid] for pid in ids}, write_model, lang)
     dropped = [pid for pid in ids if not any(pid in t["ids"] for t in themes)]
-    added = backfill(conn, pipeline.index, themes, on_topic_scores, set(screened) | set(moved), n_sources, titles)
+    added = backfill(
+        conn, pipeline.index, themes, on_topic_scores, set(screened) | set(moved), n_sources, titles, reviews=reviews
+    )
     timings["retrieval_ms"] = round((time.perf_counter() - start) * 1000)
 
     kept = [pid for t in themes for pid in t["ids"]]
     kept_ids, kept_vectors = vectors_for(conn, pipeline.index, kept)
-    deep = pick_deep(themes, kept_ids, kept_vectors, seeds, max_deep, titles)
+    deep = pick_deep(themes, kept_ids, kept_vectors, seeds, max_deep, titles, reviews)
     shown = kept + [p for p in dropped + moved if p not in kept]
     return {
         "version": 1,
@@ -435,7 +465,15 @@ def select_sources(
         "surveys_moved": moved,
         "dropped_by_themes": dropped,
         "backfilled": added,
-        "themes": [{"name": t["name"], "description": t.get("description", ""), "ids": t["ids"]} for t in themes],
+        "themes": [
+            {
+                "name": t["name"],
+                "name_local": t.get("name_local", ""),
+                "description": t.get("description", ""),
+                "ids": t["ids"],
+            }
+            for t in themes
+        ],
         "deep": deep,
         "relevance": {pid: round(relevance[pid], 4) for pid in shown if pid in relevance},
         "titles": {pid: clean_tex(titles.get(pid, "")) for pid in shown},
@@ -468,7 +506,8 @@ def plan_view(selection: dict) -> dict:
         "deep": selection["deep"],
         "themes": [
             {
-                "name": t["name"],
+                "name": t.get("name_local") or t["name"],
+                "name_en": t["name"],
                 "size": len(t["ids"]),
                 "papers": [
                     {"id": pid, "title": title(pid, ""), "relevance": rel(pid), "deep": pid in selection["deep"]}
@@ -555,13 +594,13 @@ def write_from_selection(
     timings["cards_ms"] = round((time.perf_counter() - t_cards) * 1000)
 
     t_write = time.perf_counter()
-    draft, tokens["write"], sections = writer.write_document(
+    text, tokens["write"], sections, draft = writer.write_document(
         doc_type, sources, themes, selection["subject"], lang, write_model, progress=progress
     )
     timings["write_ms"] = round((time.perf_counter() - t_write) * 1000)
 
     progress("verify", 0, 1)
-    body, report = citations.check_and_fix(draft, len(sources), tuple(writer.uncited_allowed(doc_type, lang)))
+    body, report = citations.check_and_fix(text, len(sources), tuple(writer.uncited_allowed(doc_type, lang)))
     body, mapping = citations.renumber(body)
     for s in sources:
         s["n_old"], s["n"] = s["n"], mapping.get(s["n"])
@@ -573,6 +612,7 @@ def write_from_selection(
     report["number_audit"] = citations.number_audit(body, {s["n"]: material_text(s) for s in cited})
     if lang != "en":
         report["language"] = language.audit(body)
+        report["terms"] = language.term_audit(body, draft["glossary"])
     markdown = (
         body.rstrip() + "\n\n" + citations.bibliography(cited, lang) + "\n" + citations.further_reading(further, lang)
     )
@@ -599,7 +639,13 @@ def write_from_selection(
         "screened_ids": kept,
         "relevance": {pid: v for pid, v in selection["relevance"].items() if pid in kept},
         "themes": [
-            {"name": t["name"], "size": len(t["ids"]), "deep": [pid for pid in t["ids"] if pid in deep]} for t in themes
+            {
+                "name": t["name"],
+                "name_local": draft["names"].get(t["name"], t["name"]),
+                "size": len(t["ids"]),
+                "deep": [pid for pid in t["ids"] if pid in deep],
+            }
+            for t in themes
         ],
         "deep": deep,
         "cited": [s["id"] for s in cited],
@@ -609,6 +655,7 @@ def write_from_selection(
         "tokens": tokens,
         "timings_ms": timings,
         "length": {"words": len(body.split()), "truncated": any(r["truncated"] for r in sections)},
+        "draft": draft,
     }
 
 
