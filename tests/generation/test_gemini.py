@@ -73,7 +73,9 @@ def test_complete_sends_the_model_and_counts_usage(monkeypatch):
     assert gemini.complete("Selam", max_tokens=99, model="gemini-test-flash", auth="bearer") == ("Merhaba", 42, "stop")
     body = json.loads(seen[0].data)
     assert seen[0].full_url.endswith("/chat/completions") and body["model"] == "gemini-test-flash"
-    assert body["max_tokens"] == 99 and gemini.usage() == {"calls": 1, "tokens": 42, "errors": 0}
+    usage = gemini.usage()
+    assert body["max_tokens"] == 99 and (usage["calls"], usage["tokens"], usage["errors"]) == (1, 42, 0)
+    assert usage["seconds"] >= 0
 
 
 def test_chat_reads_json_inside_code_fences(monkeypatch):

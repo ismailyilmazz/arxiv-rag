@@ -20,6 +20,7 @@ def retranslate(report: dict, model: str) -> tuple[str, dict]:
     for s in draft["sections"]:
         theme = s["key"][6:] if s["key"].startswith("theme:") else None
         text, _ = writer.drop_repeated_heading(s["text"], [s["heading"], theme])
+        text = writer.unbold_labels(text, draft.get("titles") or [])
         sections.append({**s, "text": text, "heading_out": prefix + names[theme] if theme else s["heading_out"]})
     texts, rows, tokens, glossary = writer.translate_sections(
         sections, draft["label"], lang, model, names, titles=draft.get("titles") or []

@@ -33,7 +33,11 @@ def _request(url: str, payload=None, retries: int = 5):
             if e.code in (429, 500, 502, 503, 504) and attempt < retries - 1:
                 time.sleep(2 ** (attempt + 1))
                 continue
-            raise
+            try:
+                body = " ".join(e.read().decode("utf-8", "replace").split())[:160]
+            except Exception:
+                body = ""
+            raise urllib.error.HTTPError(e.url, e.code, f"{e.reason} {body}".strip(), e.headers, None) from e
     return None
 
 

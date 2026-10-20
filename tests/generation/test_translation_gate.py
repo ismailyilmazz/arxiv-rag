@@ -424,6 +424,7 @@ def _gemini_on(monkeypatch, reply):
 
     monkeypatch.setattr(config, "GEMINI_API_KEY", "AQ.test")
     monkeypatch.setattr(gemini, "complete", complete)
+    monkeypatch.setattr(gemini, "status", lambda force=False: {"enabled": True, "ok": True})
     return calls
 
 
@@ -471,3 +472,45 @@ def test_translate_sections_reports_repair_counts(monkeypatch):
     _, rows, _, _ = writer.translate_sections(SECTIONS, "survey", "tr", "m", {})
     assert rows[-1]["section"] == "translate:repairs"
     assert (rows[-1]["units"], rows[-1]["gemini_ok"], rows[-1]["groq_tried"]) == (1, 1, 0)
+
+
+def test_groq_repairs_alone_while_the_gemini_probe_is_failing(monkeypatch):
+    from arxiv_rag.generation import gemini
+
+    calls = _gemini_on(monkeypatch, (TR, 300, "stop"))
+    monkeypatch.setattr(gemini, "status", lambda force=False: {"enabled": True, "ok": False})
+    monkeypatch.setattr(llm, "complete", Script(EN, TR))
+    stats = writer.new_repair_stats()
+    assert writer.translate_section(EN, "survey", "tr", "m", stats=stats)[0] == TR
+    assert calls == [] and (stats["gemini_tried"], stats["groq_ok"]) == (0, 1)
+
+
+def test_short_title_counts_only_when_a_citation_follows():
+    text = (
+        "A central notion is **quantum entanglement**, a non-classical correlation. "
+        "The review *Quantum entanglement* [4] covers it, as does **Quantum Cryptography** (2006) [6]."
+    )
+    found = writer.protected_titles(text, ["Quantum entanglement", "Quantum Cryptography"])
+    assert found == {"quantum entanglement", "quantum cryptography"}
+    alone = "A central notion is **quantum entanglement**, a non-classical correlation between particles."
+    assert writer.protected_titles(alone, ["Quantum entanglement"]) == set()
+    assert writer.protected_titles(f"We follow **{TITLE}** closely.", [TITLE]) == {TITLE.lower()}
+
+
+def test_bold_terms_lose_their_markup_but_titles_keep_it():
+    text = (
+        "A central notion is **quantum entanglement**, used by *Quantum Cryptography with Entangled Photons* [2]; "
+        "the theme **Broad Surveys** and “Quoted Phrase” remain."
+    )
+    out = writer.unbold_labels(text, ["Quantum Cryptography with Entangled Photons", "Quantum entanglement"])
+    assert "**quantum entanglement**" not in out and "quantum entanglement," in out
+    assert "*Quantum Cryptography with Entangled Photons* [2]" in out
+    assert "the theme Broad Surveys and" in out and "“Quoted Phrase”" in out
+
+
+def test_correct_translation_of_a_bold_term_that_equals_a_short_title_is_accepted(monkeypatch):
+    en = "A central notion is **quantum entanglement**, a non-classical correlation between particles [2]."
+    tr = "Merkezi bir kavram **kuantum dolanıklık**, parçacıklar arasındaki klasik olmayan bir ilişkidir [2]."
+    monkeypatch.setattr(llm, "complete", Script(tr))
+    text, _, _, attempts = writer.translate_section(en, "survey", "tr", "m", titles=["Quantum entanglement"])
+    assert text == tr and attempts == 1

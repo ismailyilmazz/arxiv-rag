@@ -20,7 +20,7 @@ from arxiv_rag.storage.tex import clean_authors, clean_tex
 
 EXPAND_PROMPT = """Topic: {topic}
 
-Write 5 short English search queries (3 to 8 words each) that together cover the subtopics a literature survey on this topic must include. Choose subtopics that fit the topic's own field, for example foundations and core ideas, main approaches or variants, key results or evidence, experiments, systems or applications, and limitations or open problems. Mention training data or machine learning only if the topic itself is about machine learning.
+Write 5 short English search queries (3 to 8 words each) that together cover the subtopics a literature survey on this topic must include. Choose subtopics that fit the topic's own field, for example foundations and core ideas, main approaches or variants, key results or evidence, experiments, systems or applications, and limitations or open problems. Mention training data or machine learning only if the topic itself is about machine learning. Every query must stay on the whole topic: when the topic joins several subjects, each query names all of them, never one of them alone.
 Return JSON: {{"queries": ["...", "..."]}}"""
 
 THEME_PROMPT = """Topic: {topic}
@@ -28,8 +28,8 @@ THEME_PROMPT = """Topic: {topic}
 These are clusters of paper titles collected for a literature survey on this topic:
 {clusters}
 
-For every cluster give a short theme name (2 to 6 words) and one sentence that describes what unites its papers.{local_rule} Mark a cluster as off_topic when most of its papers are unrelated to the topic. Also give the order in which the themes should be presented in the survey.
-Return JSON: {{"themes": [{{"cluster": 0, "name": "...",{local_field} "description": "...", "off_topic": false}}], "order": [0, 1]}}"""
+For every cluster give a short theme name (2 to 6 words) and one sentence that describes what unites its papers.{local_rule} Mark a cluster as off_topic when most of its papers are unrelated to the topic. In off_topic_papers list the numbers of single papers that do not fit the topic as a whole, even when the rest of their cluster does. Also give the order in which the themes should be presented in the survey.
+Return JSON: {{"themes": [{{"cluster": 0, "name": "...",{local_field} "description": "...", "off_topic": false}}], "off_topic_papers": [], "order": [0, 1]}}"""
 
 LOCAL_RULE = ' Also give "name_local": the same theme name in natural {language}, keeping only acronyms and model names in English.'
 LOCAL_FIELD = ' "name_local": "...",'
@@ -294,7 +294,8 @@ def name_themes(
     topic: str, ids: list[str], labels: np.ndarray, titles: dict[str, str], model: str, lang: str = "en"
 ) -> tuple[list[dict], int]:
     clusters = "\n".join(
-        f"Cluster {c}:\n" + "\n".join([f"- {titles[pid]}" for pid, lab in zip(ids, labels) if lab == c][:12])
+        f"Cluster {c}:\n"
+        + "\n".join(f"- [{k + 1}] {titles[pid]}" for k, (pid, lab) in enumerate(zip(ids, labels)) if lab == c)
         for c in sorted(set(labels.tolist()))
     )
     local = lang != "en"
@@ -309,6 +310,9 @@ def name_themes(
     named = {int(t["cluster"]): t for t in data.get("themes", []) if str(t.get("cluster", "")).lstrip("-").isdigit()}
     raw = [int(c) for c in data.get("order", []) if str(c).lstrip("-").isdigit() and int(c) in present]
     order = raw + [c for c in present if c not in raw]
+    flagged = {
+        ids[int(n) - 1] for n in data.get("off_topic_papers") or [] if str(n).isdigit() and 1 <= int(n) <= len(ids)
+    }
     themes = []
     for c in dict.fromkeys(order):
         t = named.get(c, {})
@@ -321,6 +325,7 @@ def name_themes(
                 "name_local": str(t.get("name_local") or "").strip() if local else "",
                 "description": str(t.get("description") or "").strip(),
                 "ids": [pid for pid, lab in zip(ids, labels) if lab == c],
+                "off_topic_ids": [pid for pid, lab in zip(ids, labels) if lab == c and pid in flagged],
             }
         )
     return themes, tokens
@@ -469,6 +474,10 @@ def select_sources(
         titles.setdefault(pid, conn.execute("SELECT title FROM papers WHERE id = ?", (pid,)).fetchone()[0])
     labels = merge_small(cluster(vectors), vectors)
     themes, tokens["themes"] = name_themes(subject, ids, labels, {pid: titles[pid] for pid in ids}, write_model, lang)
+    flagged = [pid for t in themes for pid in t.get("off_topic_ids", []) if pid not in seeds]
+    off_topic = set(sorted(flagged, key=lambda p: on_topic_scores.get(p, 0.0))[: max(1, len(ids) // 4)])
+    themes = [{**t, "ids": [p for p in t["ids"] if p not in off_topic]} for t in themes]
+    themes = [t for t in themes if t["ids"]]
     if lang != "en" and themes:
         local, extra, _ = writer.local_names(themes, lang, write_model)
         themes = [{**t, "name_local": local[t["name"]]} for t in themes]

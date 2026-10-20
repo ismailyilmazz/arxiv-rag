@@ -256,12 +256,31 @@ def localize_labels(text: str, names: dict, titles=()) -> str:
     return language.SPAN.sub(swap, text)
 
 
+CITED_AFTER = re.compile(r"[\s,;:.)\u2019']*(\(\d{4}\)\s*)?\[\d")
+
+
+def unbold_labels(text: str, titles=()) -> str:
+    keep = protected_titles(text, titles)
+
+    def plain(match):
+        if match.group(0)[0] != "*":
+            return match.group(0)
+        span = next(g for g in match.groups() if g)
+        norm = language.normalize(span)
+        if norm in keep or any(t in norm for t in keep if len(t) >= 25):
+            return match.group(0)
+        return span
+
+    return language.SPAN.sub(plain, text)
+
+
 def protected_titles(source: str, titles=()) -> set[str]:
     known = {language.normalize(t) for t in titles if t and t.strip()}
     found = set()
     for match in language.SPAN.finditer(source):
         span = language.normalize(next(g for g in match.groups() if g))
-        if span in known or (len(span) >= 20 and any(span in t for t in known)):
+        cited = bool(CITED_AFTER.match(source[match.end() : match.end() + 24]))
+        if (span in known or (len(span) >= 20 and any(span in t for t in known))) and (len(span) >= 25 or cited):
             found.add(span)
         else:
             found.update(t for t in known if len(t) >= 25 and t in span)
@@ -342,7 +361,7 @@ def new_repair_stats() -> dict:
 
 
 def _repair_engines() -> tuple:
-    return ("gemini", "groq") if gemini.available() else ("groq", "groq")
+    return ("gemini", "groq") if gemini.available() and gemini.status().get("ok") else ("groq", "groq")
 
 
 def _repair_call(engine: str, prompt: str, model: str) -> tuple[str, int]:
@@ -870,6 +889,8 @@ def write_document(
         text, repeated = drop_repeated_heading(
             text, [item["heading"], item["theme"]["name"] if item["theme"] else None]
         )
+        if lang != "en":
+            text = unbold_labels(text, [s["title"] for s in sources])
         used += tokens
         report.append(
             {

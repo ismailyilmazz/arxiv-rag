@@ -14,7 +14,7 @@ _LOCK = threading.Lock()
 _STATE_LOCK = threading.Lock()
 _STATE = {"info": None, "at": 0.0}
 _CALLS: deque = deque()
-_USAGE = {"calls": 0, "tokens": 0, "errors": 0}
+_USAGE = {"calls": 0, "tokens": 0, "errors": 0, "seconds": 0.0}
 
 
 class GeminiUnavailable(RuntimeError):
@@ -27,12 +27,12 @@ def available() -> bool:
 
 def usage() -> dict:
     with _LOCK:
-        return dict(_USAGE)
+        return {**_USAGE, "seconds": round(_USAGE["seconds"], 1)}
 
 
 def reset_usage() -> None:
     with _LOCK:
-        _USAGE.update(calls=0, tokens=0, errors=0)
+        _USAGE.update(calls=0, tokens=0, errors=0, seconds=0.0)
 
 
 def forget() -> None:
@@ -158,7 +158,12 @@ def list_models(auth: str = "") -> list[str]:
 
 
 def _send(payload: dict, auth: str) -> tuple[dict, int]:
-    data = _request("chat/completions", payload, auth=auth) or {}
+    start = time.monotonic()
+    try:
+        data = _request("chat/completions", payload, auth=auth) or {}
+    finally:
+        with _LOCK:
+            _USAGE["seconds"] += time.monotonic() - start
     tokens = int((data.get("usage") or {}).get("total_tokens") or 0)
     with _LOCK:
         _USAGE["calls"] += 1

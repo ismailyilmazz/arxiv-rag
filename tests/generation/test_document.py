@@ -796,7 +796,7 @@ def test_turkish_document_uses_plan_names_keeps_the_english_draft_and_a_glossary
     assert translating and all("section text = bölüm metni" in p and "Theme 0 = Tema 0" in p for p in translating)
     assert out["citations"]["terms"]["terms"] == len(draft["glossary"])
     assert out["citations"]["language"]["english_lines"] == 0 and out["citations"]["language"]["english_labels"] == 0
-    assert out["gemini"] == {"enabled": False, "calls": 0, "tokens": 0, "errors": 0}
+    assert out["gemini"] == {"enabled": False, "calls": 0, "tokens": 0, "errors": 0, "seconds": 0.0}
     assert all(t["name_local"].startswith("Tema ") for t in out["themes"])
 
 
@@ -971,3 +971,45 @@ def test_review_detection_is_reported_without_scholar(tmp_path, monkeypatch):
     view = document.build_document(conn, connect(tmp_path / "c.db"), pipeline, "experts", n_sources=8, dry_run=True)
     found = view["review_detection"]
     assert set(found) == {"title", "abstract", "scholar", "any"} and found["any"] >= found["abstract"]
+
+
+def test_theme_check_sees_every_title_and_drops_single_off_topic_papers(tmp_path, monkeypatch):
+    _fake_llm(monkeypatch)
+    base_chat = llm.chat
+    prompts = []
+
+    def chat(prompt, model, **kw):
+        data, tokens = base_chat(prompt, model, **kw)
+        if "clusters of paper titles" in prompt:
+            prompts.append(prompt)
+            numbers = [int(n) for n in re.findall(r"- \[(\d+)\]", prompt)]
+            data = {**data, "off_topic_papers": [max(numbers), 1]}
+        return data, tokens
+
+    monkeypatch.setattr(llm, "chat", chat)
+    conn, pipeline = _world(tmp_path)
+    view = document.build_document(
+        conn, connect(tmp_path / "c.db"), pipeline, "experts", seed_ids=[A[0]], n_sources=8, dry_run=True
+    )
+    shown = re.findall(r"- \[(\d+)\]", prompts[0])
+    assert len(shown) == len(set(shown)) and int(max(shown, key=int)) == len(shown)
+    kept = {p["id"] for t in view["themes"] for p in t["papers"]}
+    assert A[0] in kept
+    assert len(view["dropped_by_themes"]) >= 1
+
+
+def test_expansion_prompt_keeps_every_part_of_the_topic():
+    assert "never one of them alone" in document.EXPAND_PROMPT
+
+
+def test_scholar_errors_carry_the_server_message(monkeypatch):
+    import io
+    import urllib.error
+
+    def urlopen(request, timeout=0):
+        raise urllib.error.HTTPError("u", 400, "Bad Request", {}, io.BytesIO(b'{"error": "No valid paper ids given"}'))
+
+    monkeypatch.setattr(scholar.urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(scholar.time, "sleep", lambda s: None)
+    with pytest.raises(urllib.error.HTTPError, match="No valid paper ids given"):
+        scholar._request("https://example.org", {"ids": ["ARXIV:x"]})
