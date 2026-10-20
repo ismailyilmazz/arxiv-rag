@@ -1,4 +1,5 @@
 import re
+from collections import Counter
 
 import numpy as np
 import pytest
@@ -1013,3 +1014,19 @@ def test_scholar_errors_carry_the_server_message(monkeypatch):
     monkeypatch.setattr(scholar.time, "sleep", lambda s: None)
     with pytest.raises(urllib.error.HTTPError, match="No valid paper ids given"):
         scholar._request("https://example.org", {"ids": ["ARXIV:x"]})
+
+
+def _homogeneous_with_outliers(seed):
+    rng = np.random.default_rng(seed)
+    base = rng.normal(size=16) * 3
+    groups = [base + rng.normal(scale=0.5, size=16) for _ in range(3)]
+    mass = [g + rng.normal(scale=0.1, size=16) for g in groups for _ in range(9)]
+    return np.array(mass + [rng.normal(size=16) * 3 for _ in range(3)])
+
+
+@pytest.mark.parametrize("seed", [0, 2, 4, 6, 7])
+def test_outliers_do_not_collapse_a_homogeneous_topic_into_one_theme(seed):
+    vectors = _homogeneous_with_outliers(seed)
+    labels = document.merge_small(document.cluster(vectors), vectors)
+    sizes = sorted(Counter(labels.tolist()).values(), reverse=True)
+    assert len(sizes) >= 3 and sizes[0] < 20

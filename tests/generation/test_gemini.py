@@ -176,3 +176,11 @@ def test_rate_limit_after_retries_also_trips_the_breaker(monkeypatch):
     with pytest.raises(gemini.GeminiUnavailable):
         gemini.complete("x", model="m", auth="bearer")
     assert gemini.status()["ok"] is False
+
+
+def test_quota_errors_name_the_limit_and_the_model():
+    body = (
+        "429: You exceeded your current quota. * Quota exceeded for metric: "
+        "generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-3.5-flash"
+    )
+    assert gemini._short(gemini.GeminiUnavailable(f"HTTP {body}")) == "HTTP 429: kota sınırı 20, model gemini-3.5-flash"

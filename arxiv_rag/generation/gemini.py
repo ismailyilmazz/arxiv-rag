@@ -57,8 +57,15 @@ def pick_model(models: list[str], wanted: str) -> str:
     return flash[0] if flash else ""
 
 
+QUOTA = re.compile(r"limit: (\d+), model: ([\w.-]+)")
+
+
 def _short(error: Exception) -> str:
-    return re.sub(r"\s+", " ", str(error))[:120]
+    text = re.sub(r"\s+", " ", str(error))
+    quota = QUOTA.search(text)
+    if quota:
+        return f"{text[:9]} kota sınırı {quota.group(1)}, model {quota.group(2)}"
+    return text[:120]
 
 
 def _probe() -> dict:
@@ -129,7 +136,7 @@ def _wait_turn() -> None:
 
 def _body(error: urllib.error.HTTPError) -> str:
     try:
-        return error.read().decode("utf-8", "replace")[:300]
+        return error.read().decode("utf-8", "replace")[:2000]
     except Exception:
         return ""
 

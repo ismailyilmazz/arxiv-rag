@@ -272,7 +272,22 @@ def vectors_for(conn: sqlite3.Connection, index, ids: list[str]) -> tuple[list[s
     return kept, np.asarray(index.vectors[rows], dtype=np.float32)
 
 
-def cluster(vectors: np.ndarray, k_range: tuple[int, int] = (3, 6), seed: int = 42) -> np.ndarray:
+def cluster(vectors: np.ndarray, k_range: tuple[int, int] = (3, 6), seed: int = 42, min_size: int = 3) -> np.ndarray:
+    labels = _best_kmeans(vectors, k_range, seed)
+    counts = Counter(labels.tolist())
+    big = [c for c, size in counts.items() if size >= min_size]
+    if len(big) != 1 or counts[big[0]] < 2 * min_size:
+        return labels
+    core = np.flatnonzero(labels == big[0])
+    inner = _best_kmeans(vectors[core], k_range, seed)
+    if len(set(inner.tolist())) < 2:
+        return labels
+    out = labels + int(inner.max()) + 1
+    out[core] = inner
+    return out
+
+
+def _best_kmeans(vectors: np.ndarray, k_range: tuple[int, int], seed: int) -> np.ndarray:
     n = len(vectors)
     if n < 4:
         return np.zeros(n, dtype=int)

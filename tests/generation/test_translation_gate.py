@@ -411,19 +411,25 @@ def test_english_bold_term_left_by_the_translation_is_repaired(monkeypatch):
 
 
 def _gemini_on(monkeypatch, reply):
+    import re as regex
+
     from arxiv_rag import config
     from arxiv_rag.generation import gemini
 
     calls = []
 
-    def complete(prompt, max_tokens=2000, model="", auth=""):
+    def chat(prompt, max_tokens=2000, model="", auth=""):
         calls.append(prompt)
         if isinstance(reply, Exception):
             raise reply
-        return reply
+        text, tokens, finish = reply
+        if finish == "length":
+            raise gemini.GeminiUnavailable("Gemini geçersiz JSON döndürdü")
+        ids = [int(n) for n in regex.findall(r"Unit (\d+):", prompt)]
+        return {"units": [{"id": n, "text": text} for n in ids]}, tokens
 
     monkeypatch.setattr(config, "GEMINI_API_KEY", "AQ.test")
-    monkeypatch.setattr(gemini, "complete", complete)
+    monkeypatch.setattr(gemini, "chat", chat)
     monkeypatch.setattr(gemini, "status", lambda force=False: {"enabled": True, "ok": True})
     return calls
 
@@ -434,7 +440,7 @@ def test_gemini_repairs_first_and_groq_is_not_asked_again(monkeypatch):
     stats = writer.new_repair_stats()
     text, tokens, _, attempts = writer.translate_section(EN, "survey", "tr", "m", stats=stats)
     assert text == TR and tokens == 100 and attempts == 2 and len(calls) == 1
-    assert "Translate the text below into Turkish" in calls[0]
+    assert "every unit into Turkish" in calls[0] and "Unit 1:" in calls[0]
     assert stats == {"units": 1, "gemini_tried": 1, "gemini_ok": 1, "groq_tried": 0, "groq_ok": 0, "kept": 0}
 
 
@@ -548,3 +554,25 @@ def test_translate_sections_fixes_theme_names_in_place(monkeypatch):
     _, rows, _, glossary = writer.translate_sections(sections, "survey", "tr", "m", names)
     assert names == {"Entanglement Methods": "Dolanıklık Yöntemleri"} and rows[0]["names_fixed"] == 1
     assert glossary["Entanglement Methods"] == "Dolanıklık Yöntemleri"
+
+
+def test_all_units_of_a_section_go_to_gemini_in_one_request(monkeypatch):
+    calls = _gemini_on(monkeypatch, (TR, 300, "stop"))
+    monkeypatch.setattr(llm, "complete", Script())
+    stats = writer.new_repair_stats()
+    text, tokens, repaired, failed = writer.repair_paragraphs(f"{EN}\n\n{TR}\n\n{EN}\n\n{EN}", "tr", "m", stats=stats)
+    assert len(calls) == 1 and calls[0].count("Unit ") == 3 and tokens == 0
+    assert (repaired, failed) == (3, 0) and text == f"{TR}\n\n{TR}\n\n{TR}\n\n{TR}"
+    assert (stats["units"], stats["gemini_tried"], stats["gemini_ok"], stats["groq_tried"]) == (3, 3, 3, 0)
+
+
+def test_units_missing_from_the_batch_reply_fall_back_to_groq(monkeypatch):
+    from arxiv_rag.generation import gemini
+
+    _gemini_on(monkeypatch, (TR, 0, "stop"))
+    monkeypatch.setattr(gemini, "chat", lambda prompt, **kw: ({"units": [{"id": 1, "text": TR}]}, 10))
+    monkeypatch.setattr(llm, "complete", Script(TR))
+    stats = writer.new_repair_stats()
+    text, _, repaired, _ = writer.repair_paragraphs(f"{EN}\n\n{EN}", "tr", "m", stats=stats)
+    assert text == f"{TR}\n\n{TR}" and repaired == 2
+    assert (stats["gemini_ok"], stats["groq_tried"], stats["groq_ok"]) == (1, 1, 1)

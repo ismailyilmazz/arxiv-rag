@@ -374,29 +374,76 @@ def _repair_call(engine: str, prompt: str, model: str) -> tuple[str, int]:
     return text, tokens
 
 
+BATCH_REPAIR_PROMPT = """The previous translation attempt left the numbered text units below in English. Translate
+every unit into {language}.
+- Every sentence, heading, bold or italic phrase and table cell must be in {language}, except paper titles: keep paper
+  titles exactly as they are (in bold, in italics, in quotation marks, in the Work column of a table). Model names and
+  acronyms may stay in English.{titles}{glossary}
+- Keep every citation such as [3] or [1, 4] exactly as it is and where it is, and keep the markdown structure of each
+  unit.
+- Translate each unit on its own: do not merge, split or summarize units, and do not add notes.
+Return JSON: {{"units": [{{"id": 1, "text": "..."}}]}}
+
+{units}"""
+
+
+def _gemini_batch(blocks: list[str], lang: str, glossary, titles) -> dict:
+    units = "\n\n".join(f"Unit {k}:\n<<<\n{block}\n>>>" for k, block in enumerate(blocks, start=1))
+    prompt = BATCH_REPAIR_PROMPT.format(
+        language=LANGUAGES[lang],
+        units=units,
+        glossary=glossary_rule(glossary),
+        titles=titles_rule("\n\n".join(blocks), titles),
+    )
+    try:
+        data, _ = gemini.chat(prompt, max_tokens=GEMINI_REPAIR_TOKENS * 2)
+    except gemini.GeminiUnavailable:
+        return {}
+    out = {}
+    for row in data.get("units") or []:
+        if isinstance(row, dict) and str(row.get("id", "")).isdigit() and isinstance(row.get("text"), str):
+            out[int(row["id"])] = row["text"]
+    return out
+
+
+def _accepted(piece: str, block: str, titles) -> bool:
+    return bool(
+        piece
+        and is_complete(piece, block, titles=titles)
+        and not language.block_is_english(piece)
+        and not english_labels(piece, titles)
+    )
+
+
 def repair_paragraphs(
     text: str, lang: str, model: str, tables: bool = False, glossary=None, titles=(), stats=None
 ) -> tuple[str, int, int, int]:
     stats = stats if stats is not None else new_repair_stats()
     blocks, tokens, repaired, failed = re.split(r"\n\s*\n", text.strip()), 0, 0, 0
-    for i, block in enumerate(blocks):
-        is_table = block.lstrip().startswith("|")
-        if not ((tables and is_table) or language.block_is_english(block) or english_labels(block, titles)):
-            continue
+    wanted = [
+        i
+        for i, block in enumerate(blocks)
+        if (tables and block.lstrip().startswith("|"))
+        or language.block_is_english(block)
+        or english_labels(block, titles)
+    ]
+    engines = _repair_engines() if wanted else ()
+    batch = _gemini_batch([blocks[i] for i in wanted], lang, glossary, titles) if "gemini" in engines else {}
+    for k, i in enumerate(wanted, start=1):
+        block = blocks[i]
         stats["units"] += 1
         prompt = RETRY_TRANSLATE_PROMPT.format(
             language=LANGUAGES[lang], text=block, glossary=glossary_rule(glossary), titles=titles_rule(block, titles)
         )
-        for engine in _repair_engines():
+        for engine in engines:
             stats[f"{engine}_tried"] += 1
-            piece, extra = _repair_call(engine, prompt, model)
-            piece, tokens = fix_tables(strip_meta_notes(piece.strip()), block, lang), tokens + extra
-            if (
-                piece
-                and is_complete(piece, block, titles=titles)
-                and not language.block_is_english(piece)
-                and not english_labels(piece, titles)
-            ):
+            if engine == "gemini":
+                piece = batch.get(k, "")
+            else:
+                piece, extra = _repair_call(engine, prompt, model)
+                tokens += extra
+            piece = fix_tables(strip_meta_notes(piece.strip()), block, lang)
+            if _accepted(piece, block, titles):
                 blocks[i], repaired = piece, repaired + 1
                 stats[f"{engine}_ok"] += 1
                 break
