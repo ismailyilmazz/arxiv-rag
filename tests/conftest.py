@@ -1,6 +1,14 @@
 import pytest
 
+from arxiv_rag import config
+from arxiv_rag.generation import gemini
 from arxiv_rag.storage.db import COLUMNS, connect, init_db, upsert_papers
+
+
+@pytest.fixture(autouse=True)
+def no_gemini_key(monkeypatch):
+    monkeypatch.setattr(config, "GEMINI_API_KEY", "")
+    gemini.forget()
 
 
 def make_row(pid, title, abstract):

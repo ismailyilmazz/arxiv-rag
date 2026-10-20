@@ -13,7 +13,7 @@ from arxiv_rag.api.schemas import DocumentIn, PlanIn, SearchIn
 from arxiv_rag.api.settings import Settings
 from arxiv_rag.api.store import Store
 from arxiv_rag.api.worker import RESTART_MESSAGE, Worker
-from arxiv_rag.generation import document
+from arxiv_rag.generation import document, gemini
 from arxiv_rag.storage.arxiv_ids import abs_url
 from arxiv_rag.storage.db import connect
 from arxiv_rag.storage.tex import clean_authors, clean_tex
@@ -142,6 +142,7 @@ def create_app(
         return {
             "status": "ok",
             "pipeline_loaded": "pipeline" in shared,
+            "gemini": gemini.status(),
             "queue": {kind: store.active_count(kind) for kind in workers},
             "limits": {
                 "plans_per_ip_hour": settings.plans_per_ip_hour,

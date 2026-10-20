@@ -173,7 +173,7 @@ SPAN = re.compile(r"\*\*([^*]+)\*\*|\*([^*\s][^*]*)\*|\u201c([^\u201d\n]+)\u201d
 
 
 def normalize(text: str) -> str:
-    text = re.sub(r"\[[\d,\s\u2013-]+\]", " ", text.translate(HYPHENS)).lower()
+    text = re.sub(r"\s*-\s*", "-", re.sub(r"\[[\d,\s\u2013-]+\]", " ", text.translate(HYPHENS))).lower()
     return " ".join(re.sub(r"[\"'\u201c\u201d\u2018\u2019]", " ", text).split()).strip(" .,:;")
 
 

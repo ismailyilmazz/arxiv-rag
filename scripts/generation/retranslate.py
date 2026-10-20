@@ -37,7 +37,10 @@ def retranslate(report: dict, model: str) -> tuple[str, dict]:
         "language": language.audit(body),
         "terms": language.term_audit(body, glossary),
     }
-    return f"# {draft.get('title', '')}\n\n{body}\n", summary
+    labels = writer.english_labels(body, draft.get("titles") or [])
+    summary["language"].update(english_labels=len(labels), label_examples=[t[:80] for t in labels[:5]])
+    title = writer.clean_title(draft.get("title", ""), report.get("topic", ""))
+    return f"# {title}\n\n{body}\n", summary
 
 
 def main() -> None:

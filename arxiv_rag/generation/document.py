@@ -12,7 +12,7 @@ from sklearn.metrics import silhouette_score
 
 from arxiv_rag import config
 from arxiv_rag.evaluation import coverage
-from arxiv_rag.generation import cards, citations, language, llm, scholar, writer
+from arxiv_rag.generation import cards, citations, gemini, language, llm, scholar, writer
 from arxiv_rag.search import bm25
 from arxiv_rag.search.related import related
 from arxiv_rag.storage.arxiv_ids import normalize_id
@@ -78,8 +78,30 @@ _SURVEY = re.compile(
 )
 
 
+_REVIEW_ANYWHERE = re.compile(
+    r"\b(this|the present|our) (review|survey|tutorial|overview|primer|lecture notes|lectures|course)\b"
+    r"|\b(this|the present) (article|paper|chapter|work) (reviews|surveys|summari[sz]es)\b"
+    r"|\b(review article|lecture notes|these lectures|pedagogical (introduction|review|overview)|"
+    r"comprehensive (review|survey|overview)|we survey the (literature|field|state))\b",
+    re.IGNORECASE,
+)
+_REVIEW_OPENING = re.compile(
+    r"\b(we|i) (review|survey|give an overview|provide an overview|present an overview|summari[sz]e)\b"
+    r"|^(a |an )?(review|survey|overview|tutorial|introduction) (of|on|to)\b",
+    re.IGNORECASE,
+)
+
+
 def is_survey(title: str) -> bool:
     return bool(_SURVEY.search(title or ""))
+
+
+def review_abstract(abstract: str) -> bool:
+    text = " ".join((abstract or "").split())
+    if _REVIEW_ANYWHERE.search(text):
+        return True
+    opening = " ".join(re.split(r"(?<=[.!?])\s+", text)[:2])
+    return bool(_REVIEW_OPENING.search(opening))
 
 
 def survey_like(pid: str, titles: dict, reviews=frozenset()) -> bool:
@@ -422,13 +444,23 @@ def select_sources(
     scores = rerank(fused, cite)
     on_topic_scores = {pid: v for pid, v in scores.items() if on_topic(pid, gate_keep)}
     pool = list(fused)
-    titles = {
-        r[0]: r[1]
+    rows = [
+        r
         for i in range(0, len(pool), 900)
         for r in conn.execute(
-            f"SELECT id, title FROM papers WHERE id IN ({','.join('?' * len(pool[i : i + 900]))})", pool[i : i + 900]
+            f"SELECT id, title, abstract FROM papers WHERE id IN ({','.join('?' * len(pool[i : i + 900]))})",
+            pool[i : i + 900],
         )
+    ]
+    titles = {r[0]: r[1] for r in rows}
+    by_abstract = {r[0] for r in rows if review_abstract(r[2])}
+    review_detection = {
+        "title": sum(is_survey(r[1]) for r in rows),
+        "abstract": len(by_abstract),
+        "scholar": len(reviews),
+        "any": len({r[0] for r in rows if is_survey(r[1])} | by_abstract | reviews),
     }
+    reviews = reviews | by_abstract
     screened, moved = screen(on_topic_scores, seeds, n_sources, titles, reviews=reviews)
     ids, vectors = vectors_for(conn, pipeline.index, screened)
     if not ids:
@@ -463,6 +495,7 @@ def select_sources(
         "rejected_queries": rejected,
         "forced": force,
         "scholar": s2,
+        "review_detection": review_detection,
         "candidate_ids": list(fused),
         "off_topic_candidates": len(scores) - len(on_topic_scores),
         "screened_ids": kept,
@@ -499,6 +532,7 @@ def plan_view(selection: dict) -> dict:
         "rejected_queries": selection["rejected_queries"],
         "forced": selection.get("forced", False),
         "scholar": selection["scholar"],
+        "review_detection": selection.get("review_detection", {}),
         "candidates": len(selection["candidate_ids"]),
         "off_topic_candidates": selection["off_topic_candidates"],
         "screened": len(selection["screened_ids"]),
@@ -544,6 +578,7 @@ def write_from_selection(
     write_model = write_model or config.LLM_WRITE_MODEL
     policy = policy or config.FULLTEXT_POLICY
     progress = progress or (lambda stage, done, total: None)
+    gemini.reset_usage()
     cards.init_cache(cache)
     start = time.perf_counter()
     doc_type, lang, topic, focus = selection["doc_type"], selection["lang"], selection["topic"], selection["focus"]
@@ -616,6 +651,8 @@ def write_from_selection(
     report["number_audit"] = citations.number_audit(body, {s["n"]: material_text(s) for s in cited})
     if lang != "en":
         report["language"] = language.audit(body)
+        labels = writer.english_labels(body, draft["titles"])
+        report["language"].update(english_labels=len(labels), label_examples=[t[:80] for t in labels[:5]])
         report["terms"] = language.term_audit(body, draft["glossary"])
     markdown = (
         body.rstrip() + "\n\n" + citations.bibliography(cited, lang) + "\n" + citations.further_reading(further, lang)
@@ -632,6 +669,7 @@ def write_from_selection(
         "queries": selection["queries"],
         "rejected_queries": selection["rejected_queries"],
         "scholar": selection["scholar"],
+        "review_detection": selection.get("review_detection", {}),
         "candidates": len(selection["candidate_ids"]),
         "off_topic_candidates": selection["off_topic_candidates"],
         "screened": len(kept),
@@ -660,6 +698,7 @@ def write_from_selection(
         "timings_ms": timings,
         "length": {"words": len(body.split()), "truncated": any(r["truncated"] for r in sections)},
         "draft": draft,
+        "gemini": {"enabled": gemini.available(), **gemini.usage()},
     }
 
 

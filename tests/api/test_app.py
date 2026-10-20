@@ -114,6 +114,7 @@ def test_health_and_search(tmp_path):
     assert out["results"][0]["title"] == f"Paper {IDS[0]}" and out["results"][0]["url"].endswith(IDS[0])
     health = client.get("/api/health").json()
     assert health["pipeline_loaded"] and health["queue"] == {"plan": 0, "document": 0}
+    assert health["gemini"] == {"enabled": False}
     assert client.post("/api/search", json={"query": "x"}).status_code == 422
 
 

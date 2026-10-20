@@ -10,7 +10,7 @@ REPORT = {
     "draft": {
         "label": "research proposal on x",
         "lang": "tr",
-        "title": "Başlık",
+        "title": "Başlık】",
         "names": {"Broad Surveys": "Broad Surveys"},
         "glossary": {},
         "sections": [

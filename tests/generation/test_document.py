@@ -795,7 +795,8 @@ def test_turkish_document_uses_plan_names_keeps_the_english_draft_and_a_glossary
     translating = [p for p in prompts if p.startswith("Translate the following section")]
     assert translating and all("section text = bölüm metni" in p and "Theme 0 = Tema 0" in p for p in translating)
     assert out["citations"]["terms"]["terms"] == len(draft["glossary"])
-    assert out["citations"]["language"]["english_lines"] == 0
+    assert out["citations"]["language"]["english_lines"] == 0 and out["citations"]["language"]["english_labels"] == 0
+    assert out["gemini"] == {"enabled": False, "calls": 0, "tokens": 0, "errors": 0}
     assert all(t["name_local"].startswith("Tema ") for t in out["themes"])
 
 
@@ -934,3 +935,39 @@ def test_plan_retranslates_turkish_theme_names_that_keep_english_words(tmp_path,
     )
     assert all(t["name"].startswith("Dolanıklık Theme ") for t in view["themes"])
     assert view["tokens"]["themes"] > 40
+
+
+@pytest.mark.parametrize(
+    "abstract",
+    [
+        "Quantum key distribution has matured. In this review, we provide a general introduction to its security.",
+        "This article reviews the basic aspects of entanglement including its detection and distillation.",
+        "We review the theory of quantum cryptography and its experimental progress over two decades.",
+        "These lecture notes introduce entanglement entropy in quantum field theory.",
+        "A survey of lattice-based schemes for the post-quantum era.",
+    ],
+)
+def test_review_abstracts_are_detected(abstract):
+    assert document.review_abstract(abstract)
+
+
+@pytest.mark.parametrize(
+    "abstract",
+    [
+        "We propose a new protocol for key distribution. We first prove its security. Finally, we review open questions.",
+        "Peer review of experiments is hard; we design a tamper-proof setup for entangled photons.",
+        "We demonstrate entanglement-based QKD over 144 km of free space.",
+        "",
+        None,
+    ],
+)
+def test_research_abstracts_are_not_reviews(abstract):
+    assert not document.review_abstract(abstract)
+
+
+def test_review_detection_is_reported_without_scholar(tmp_path, monkeypatch):
+    _fake_llm(monkeypatch)
+    conn, pipeline = _world(tmp_path)
+    view = document.build_document(conn, connect(tmp_path / "c.db"), pipeline, "experts", n_sources=8, dry_run=True)
+    found = view["review_detection"]
+    assert set(found) == {"title", "abstract", "scholar", "any"} and found["any"] >= found["abstract"]

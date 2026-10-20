@@ -174,7 +174,7 @@ def test_english_table_left_by_the_translation_is_repaired(monkeypatch):
 
 
 def test_translation_prompt_asks_for_table_cells():
-    prompt = writer.TRANSLATE_PROMPT.format(label="x", language="Turkish", text="t", glossary="")
+    prompt = writer.TRANSLATE_PROMPT.format(label="x", language="Turkish", text="t", glossary="", titles="")
     assert "table cells" in prompt and "unchanged" not in prompt
 
 
@@ -311,8 +311,8 @@ def test_work_column_keeps_the_original_titles():
 
 
 def test_translation_prompts_protect_titles():
-    prompt = writer.TRANSLATE_PROMPT.format(label="x", language="Turkish", text="t", glossary="")
-    retry = writer.RETRY_TRANSLATE_PROMPT.format(language="Turkish", text="t", glossary="")
+    prompt = writer.TRANSLATE_PROMPT.format(label="x", language="Turkish", text="t", glossary="", titles="")
+    retry = writer.RETRY_TRANSLATE_PROMPT.format(language="Turkish", text="t", glossary="", titles="")
     assert "Paper titles are never translated" in prompt and "Work column" in prompt and "Work column" in retry
     assert writer.glossary_rule({"survey": "derleme"}).startswith("\n- Outside paper titles")
 
@@ -374,3 +374,37 @@ def test_stray_brackets_are_removed_from_the_title():
         == "Kuantum Kriptografi: Literatür İncelemesi"
     )
     assert writer.clean_title("  ", "konu") == "konu"
+
+
+HYPHEN_TITLE = "Strategic Roadmap for Quantum- Resistant Security: A Framework"
+
+
+def test_titles_are_listed_in_the_prompt_and_other_bold_text_must_be_translated():
+    text = f"**{TITLE}** [1] and **privacy amplification** are discussed."
+    rule = writer.titles_rule(text, [TITLE, "Unrelated Paper Title Here"])
+    assert TITLE in rule and "Unrelated" not in rule and "must be translated" in rule
+    assert "names no paper titles" in writer.titles_rule("Plain text [1].", [TITLE])
+
+
+def test_english_labels_skip_titles_and_turkish_bold_text():
+    text = (
+        f"**{TITLE}** [1], **Strategic Roadmap for Quantum‑Resistant Security: A Framework** [2], "
+        "**gizli paylaşım** ve **privacy amplification** [3]."
+    )
+    assert writer.english_labels(text, [TITLE, HYPHEN_TITLE]) == ["privacy amplification"]
+
+
+def test_bold_theme_names_are_replaced_but_titles_are_not():
+    names = {"Broad Surveys of Methods": "Yöntemlere Genel Bakış", TITLE: "Çevrilmemeli"}
+    text = f"İlk tema, **Broad Surveys of Methods**, ve **{TITLE}** [1]."
+    assert writer.localize_labels(text, names, [TITLE]) == f"İlk tema, **Yöntemlere Genel Bakış**, ve **{TITLE}** [1]."
+
+
+def test_english_bold_term_left_by_the_translation_is_repaired(monkeypatch):
+    en = "The bound on **privacy amplification** limits the extractable key in every practical protocol [3]."
+    left = "Gizlilik sınırı, **privacy amplification** için her pratik protokolde çıkarılabilir anahtarı kısıtlar [3]."
+    fixed = "Gizlilik sınırı, **gizlilik artırımı** için her pratik protokolde çıkarılabilir anahtarı kısıtlar [3]."
+    fake = Script(left, fixed)
+    monkeypatch.setattr(llm, "complete", fake)
+    text, _, _, attempts = writer.translate_section(en, "survey", "tr", "m", titles=[TITLE])
+    assert text == fixed and attempts == 2 and "names no paper titles" in fake.prompts[1]

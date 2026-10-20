@@ -70,8 +70,8 @@ CONTINUE = (
 
 TRANSLATE_PROMPT = """Translate the following section of a {label} from English into {language}.
 - Keep every citation such as [3] or [1, 4] exactly as it is and where it is.
-- Paper titles are never translated: keep them exactly as they are wherever they appear (in bold, in italics, in the
-  Work column of a table). Keep model names and acronyms in English too.
+- Paper titles are never translated: keep them exactly as they are wherever they appear (in bold, in italics, in
+  quotation marks, in the Work column of a table). Keep model names and acronyms in English too.{titles}
 - Keep the markdown structure (table rows and columns, bold text, lists) and translate everything else, including
   the table header and the other table cells.
 - Translate other technical terms into the {language} terms of the field.{glossary}
@@ -82,9 +82,9 @@ Section:
 {text}"""
 
 RETRY_TRANSLATE_PROMPT = """The previous translation attempt returned English. Translate the text below into {language}.
-- Every sentence, heading and table cell of your output must be in {language}, except paper titles: keep paper
-  titles exactly as they are (in bold, in italics, in the Work column of a table). Model names and acronyms may stay
-  in English.{glossary}
+- Every sentence, heading, bold or italic phrase and table cell of your output must be in {language}, except paper
+  titles: keep paper titles exactly as they are (in bold, in italics, in quotation marks, in the Work column of a
+  table). Model names and acronyms may stay in English.{titles}{glossary}
 - Keep every citation such as [3] or [1, 4] exactly as it is and where it is, and keep the markdown structure.
 - Do not add notes or comments about the text. Return only the translation.
 
@@ -213,6 +213,49 @@ def _citation_numbers(text: str) -> set[int]:
     return {int(n) for group in re.findall(r"\[([\d,\s\u2013-]+)\]", text) for n in re.findall(r"\d+", group)}
 
 
+def titles_rule(text: str, titles=()) -> str:
+    found = sorted(protected_titles(text, titles))
+    named = [t for t in titles if language.normalize(t) in found]
+    if not named:
+        return "\n- This text names no paper titles, so translate every bold, italic or quoted phrase."
+    listed = "; ".join(f"\u201c{t}\u201d" for t in dict.fromkeys(named))
+    return (
+        f"\n- The paper titles in this text are: {listed}. Keep exactly these unchanged; every other bold, italic or "
+        "quoted phrase is not a title and must be translated."
+    )
+
+
+def english_labels(text: str, titles=()) -> list[str]:
+    found = protected_titles(text, titles)
+    labels = []
+    for match in language.SPAN.finditer(text):
+        span = next(g for g in match.groups() if g)
+        norm = language.normalize(span)
+        if norm in found or any(t in norm for t in found if len(t) >= 25):
+            continue
+        if language.text_is_english(span):
+            labels.append(span.strip())
+    return labels
+
+
+def localize_labels(text: str, names: dict, titles=()) -> str:
+    known = {language.normalize(t) for t in titles}
+    local = {
+        language.normalize(en): target
+        for en, target in names.items()
+        if en and target and not same_text(en, target) and language.normalize(en) not in known
+    }
+    if not local:
+        return text
+
+    def swap(match):
+        span = next(g for g in match.groups() if g)
+        target = local.get(language.normalize(span))
+        return match.group(0).replace(span, target) if target else match.group(0)
+
+    return language.SPAN.sub(swap, text)
+
+
 def protected_titles(source: str, titles=()) -> set[str]:
     known = {language.normalize(t) for t in titles if t and t.strip()}
     found = set()
@@ -296,13 +339,20 @@ def repair_paragraphs(
     blocks, tokens, repaired, failed = re.split(r"\n\s*\n", text.strip()), 0, 0, 0
     for i, block in enumerate(blocks):
         is_table = block.lstrip().startswith("|")
-        if not ((tables and is_table) or language.block_is_english(block)):
+        if not ((tables and is_table) or language.block_is_english(block) or english_labels(block, titles)):
             continue
-        prompt = RETRY_TRANSLATE_PROMPT.format(language=LANGUAGES[lang], text=block, glossary=glossary_rule(glossary))
+        prompt = RETRY_TRANSLATE_PROMPT.format(
+            language=LANGUAGES[lang], text=block, glossary=glossary_rule(glossary), titles=titles_rule(block, titles)
+        )
         for _ in range(2):
             piece, extra, _ = _call(prompt, model, 2000)
             piece, tokens = fix_tables(strip_meta_notes(piece.strip()), block, lang), tokens + extra
-            if piece and is_complete(piece, block, titles=titles) and not language.block_is_english(piece):
+            if (
+                piece
+                and is_complete(piece, block, titles=titles)
+                and not language.block_is_english(piece)
+                and not english_labels(piece, titles)
+            ):
                 blocks[i], repaired = piece, repaired + 1
                 break
         else:
@@ -314,7 +364,13 @@ def translate_section(
     text: str, label: str, lang: str, model: str, glossary=None, titles=()
 ) -> tuple[str, int, bool, int]:
     out, tokens, truncated = _call(
-        TRANSLATE_PROMPT.format(label=label, language=LANGUAGES[lang], text=text, glossary=glossary_rule(glossary)),
+        TRANSLATE_PROMPT.format(
+            label=label,
+            language=LANGUAGES[lang],
+            text=text,
+            glossary=glossary_rule(glossary),
+            titles=titles_rule(text, titles),
+        ),
         model,
         4000,
     )
@@ -325,7 +381,7 @@ def translate_section(
     if truncated or not is_complete(out, text, titles=titles):
         out, extra, _, _ = repair_paragraphs(text, lang, model, tables=True, glossary=glossary, titles=titles)
         return out, tokens + extra, False, 2
-    if language.has_english(out):
+    if language.has_english(out) or english_labels(out, titles):
         out, extra, repaired, _ = repair_paragraphs(out, lang, model, glossary=glossary, titles=titles)
         return out, tokens + extra, truncated, 2 if repaired else 1
     return out, tokens, truncated, 1
@@ -431,7 +487,7 @@ def translate_sections(
     progress("translate", 0, len(sections))
     for done, item in enumerate(sections, start=1):
         text, tokens, truncated, attempts = translate_section(item["text"], label, lang, model, glossary, titles)
-        text, tidied = tidy_section(text.strip())
+        text, tidied = tidy_section(localize_labels(text.strip(), names, titles))
         used += tokens
         found = language.audit(text)
         report.append(
@@ -444,6 +500,7 @@ def translate_sections(
                 "attempts": attempts,
                 "english_share": found["english_share"],
                 "english_left": found["english_paragraphs"] + found["english_tables"] + found["english_lines"],
+                "english_labels": len(english_labels(text, titles)),
             }
         )
         texts[item["key"]] = text

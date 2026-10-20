@@ -1,0 +1,161 @@
+{
+  "tokens": 26490,
+  "headings": {
+    "translated": 4,
+    "of": 4,
+    "from_plan": 1
+  },
+  "glossary": {
+    "security proofs": "güvenlik ispatları",
+    "bit commitment": "bit taahhüdü",
+    "key distribution": "anahtar dağıtımı",
+    "quantum computers": "kuantum bilgisayarlar",
+    "Shor algorithm": "Shor algoritması",
+    "entangled photons": "dolanan fotonlar",
+    "entangled states": "dolanan durumlar",
+    "photon pairs": "foton çiftleri",
+    "quantum mechanics": "kuantum mekaniği",
+    "security analyses": "güvenlik analizleri",
+    "information-theoretic security": "bilgi-teorik güvenlik",
+    "key-generation rates": "anahtar üretim oranları",
+    "large-scale quantum": "büyük ölçekli kuantum",
+    "quantum adversaries": "kuantum düşmanları",
+    "quantum bit": "kuantum biti",
+    "quantum cryptography": "kuantum kriptografi",
+    "quantum-secure primitives": "kuantum güvenli ilkelere",
+    "security guarantees": "güvenlik garantileri",
+    "active switches": "aktif anahtarlar",
+    "Bell-type inequalities": "Bell tipi eşitsizlikler",
+    "classical channels": "klasik kanallar",
+    "classical public-key": "klasik açık anahtar",
+    "classical schemes": "klasik şemalar",
+    "entanglement": "dolanıklık",
+    "experimental": "deneysel",
+    "theoretical": "kuramsal",
+    "entanglement-based": "dolanıklığa dayalı",
+    "cryptographic protocols": "kriptografik protokoller",
+    "post-quantum": "post-kuantum",
+    "impossibility": "imkânsızlık",
+    "survey": "derleme",
+    "surveys": "derlemeler",
+    "Entanglement in Quantum Cryptography": "Kuantum Kriptografisinde Dolanıklık",
+    "Post‑Quantum and Quantum‑Resistant Cryptography": "Post‑Kuantum ve Kuantuma Dirençli Kriptografi",
+    "Foundations and Limits of Quantum Secure primitives": "Kuantum Güvenli Primitiflerin Temelleri ve Sınırları",
+    "Entanglement‑Based QKD Experiments": "Dolanıklık‑Tabanlı QKD Deneyleri"
+  },
+  "sections": [
+    {
+      "section": "translate:glossary",
+      "source": null,
+      "tokens": 951,
+      "truncated": false,
+      "tidied": false,
+      "terms": 36
+    },
+    {
+      "section": "translate:intro",
+      "source": null,
+      "tokens": 2228,
+      "truncated": false,
+      "tidied": false,
+      "attempts": 1,
+      "english_share": 0.0,
+      "english_left": 0
+    },
+    {
+      "section": "translate:background",
+      "source": null,
+      "tokens": 2888,
+      "truncated": false,
+      "tidied": false,
+      "attempts": 1,
+      "english_share": 0.0,
+      "english_left": 0
+    },
+    {
+      "section": "translate:theme:Entanglement in Quantum Cryptography",
+      "source": null,
+      "tokens": 3942,
+      "truncated": false,
+      "tidied": false,
+      "attempts": 1,
+      "english_share": 0.0,
+      "english_left": 0
+    },
+    {
+      "section": "translate:theme:Post‑Quantum and Quantum‑Resistant Cryptography",
+      "source": null,
+      "tokens": 3052,
+      "truncated": false,
+      "tidied": false,
+      "attempts": 1,
+      "english_share": 0.0,
+      "english_left": 0
+    },
+    {
+      "section": "translate:theme:Foundations and Limits of Quantum Secure primitives",
+      "source": null,
+      "tokens": 3099,
+      "truncated": false,
+      "tidied": false,
+      "attempts": 1,
+      "english_share": 0.0,
+      "english_left": 0
+    },
+    {
+      "section": "translate:theme:Entanglement‑Based QKD Experiments",
+      "source": null,
+      "tokens": 3168,
+      "truncated": false,
+      "tidied": false,
+      "attempts": 1,
+      "english_share": 0.0,
+      "english_left": 0
+    },
+    {
+      "section": "translate:comparison",
+      "source": null,
+      "tokens": 2358,
+      "truncated": false,
+      "tidied": false,
+      "attempts": 1,
+      "english_share": 0.0,
+      "english_left": 0
+    },
+    {
+      "section": "translate:open",
+      "source": null,
+      "tokens": 2324,
+      "truncated": false,
+      "tidied": false,
+      "attempts": 1,
+      "english_share": 0.0,
+      "english_left": 0
+    },
+    {
+      "section": "translate:conclusion",
+      "source": null,
+      "tokens": 2195,
+      "truncated": false,
+      "tidied": false,
+      "attempts": 1,
+      "english_share": 0.0,
+      "english_left": 0
+    }
+  ],
+  "language": {
+    "paragraphs": 56,
+    "english_paragraphs": 0,
+    "english_share": 0.0,
+    "tables": 1,
+    "english_tables": 0,
+    "lines": 10,
+    "english_lines": 0,
+    "examples": []
+  },
+  "terms": {
+    "terms": 36,
+    "english_left": 0,
+    "examples": {}
+  }
+}
