@@ -1,6 +1,6 @@
 import re
 
-from arxiv_rag.generation import language, llm
+from arxiv_rag.generation import gemini, language, llm
 
 LANGUAGES = {"en": "English", "tr": "Turkish"}
 STYLE = (
@@ -333,19 +333,45 @@ def glossary_rule(glossary) -> str:
     return f"\n- Outside paper titles, always use these translations of terms and theme names: {pairs}."
 
 
+REPAIR_TOKENS = 2000
+GEMINI_REPAIR_TOKENS = 8000
+
+
+def new_repair_stats() -> dict:
+    return {"units": 0, "gemini_tried": 0, "gemini_ok": 0, "groq_tried": 0, "groq_ok": 0, "kept": 0}
+
+
+def _repair_engines() -> tuple:
+    return ("gemini", "groq") if gemini.available() else ("groq", "groq")
+
+
+def _repair_call(engine: str, prompt: str, model: str) -> tuple[str, int]:
+    if engine == "gemini":
+        try:
+            text, _, finish = gemini.complete(prompt, max_tokens=GEMINI_REPAIR_TOKENS)
+        except gemini.GeminiUnavailable:
+            return "", 0
+        return ("" if finish == "length" else text), 0
+    text, tokens, _ = _call(prompt, model, REPAIR_TOKENS)
+    return text, tokens
+
+
 def repair_paragraphs(
-    text: str, lang: str, model: str, tables: bool = False, glossary=None, titles=()
+    text: str, lang: str, model: str, tables: bool = False, glossary=None, titles=(), stats=None
 ) -> tuple[str, int, int, int]:
+    stats = stats if stats is not None else new_repair_stats()
     blocks, tokens, repaired, failed = re.split(r"\n\s*\n", text.strip()), 0, 0, 0
     for i, block in enumerate(blocks):
         is_table = block.lstrip().startswith("|")
         if not ((tables and is_table) or language.block_is_english(block) or english_labels(block, titles)):
             continue
+        stats["units"] += 1
         prompt = RETRY_TRANSLATE_PROMPT.format(
             language=LANGUAGES[lang], text=block, glossary=glossary_rule(glossary), titles=titles_rule(block, titles)
         )
-        for _ in range(2):
-            piece, extra, _ = _call(prompt, model, 2000)
+        for engine in _repair_engines():
+            stats[f"{engine}_tried"] += 1
+            piece, extra = _repair_call(engine, prompt, model)
             piece, tokens = fix_tables(strip_meta_notes(piece.strip()), block, lang), tokens + extra
             if (
                 piece
@@ -354,14 +380,16 @@ def repair_paragraphs(
                 and not english_labels(piece, titles)
             ):
                 blocks[i], repaired = piece, repaired + 1
+                stats[f"{engine}_ok"] += 1
                 break
         else:
             failed += 1
+            stats["kept"] += 1
     return "\n\n".join(blocks), tokens, repaired, failed
 
 
 def translate_section(
-    text: str, label: str, lang: str, model: str, glossary=None, titles=()
+    text: str, label: str, lang: str, model: str, glossary=None, titles=(), stats=None
 ) -> tuple[str, int, bool, int]:
     out, tokens, truncated = _call(
         TRANSLATE_PROMPT.format(
@@ -379,10 +407,12 @@ def translate_section(
         return out, tokens, truncated, 1
     out = fix_tables(out, text, lang)
     if truncated or not is_complete(out, text, titles=titles):
-        out, extra, _, _ = repair_paragraphs(text, lang, model, tables=True, glossary=glossary, titles=titles)
+        out, extra, _, _ = repair_paragraphs(
+            text, lang, model, tables=True, glossary=glossary, titles=titles, stats=stats
+        )
         return out, tokens + extra, False, 2
     if language.has_english(out) or english_labels(out, titles):
-        out, extra, repaired, _ = repair_paragraphs(out, lang, model, glossary=glossary, titles=titles)
+        out, extra, repaired, _ = repair_paragraphs(out, lang, model, glossary=glossary, titles=titles, stats=stats)
         return out, tokens + extra, truncated, 2 if repaired else 1
     return out, tokens, truncated, 1
 
@@ -483,10 +513,10 @@ def translate_sections(
             "terms": len(glossary),
         }
     ]
-    texts = {}
+    texts, stats = {}, new_repair_stats()
     progress("translate", 0, len(sections))
     for done, item in enumerate(sections, start=1):
-        text, tokens, truncated, attempts = translate_section(item["text"], label, lang, model, glossary, titles)
+        text, tokens, truncated, attempts = translate_section(item["text"], label, lang, model, glossary, titles, stats)
         text, tidied = tidy_section(localize_labels(text.strip(), names, titles))
         used += tokens
         found = language.audit(text)
@@ -505,6 +535,9 @@ def translate_sections(
         )
         texts[item["key"]] = text
         progress("translate", done, len(sections))
+    report.append(
+        {"section": "translate:repairs", "source": None, "tokens": 0, "truncated": False, "tidied": False, **stats}
+    )
     return texts, report, used, glossary
 
 

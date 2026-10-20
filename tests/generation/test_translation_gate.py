@@ -408,3 +408,66 @@ def test_english_bold_term_left_by_the_translation_is_repaired(monkeypatch):
     monkeypatch.setattr(llm, "complete", fake)
     text, _, _, attempts = writer.translate_section(en, "survey", "tr", "m", titles=[TITLE])
     assert text == fixed and attempts == 2 and "names no paper titles" in fake.prompts[1]
+
+
+def _gemini_on(monkeypatch, reply):
+    from arxiv_rag import config
+    from arxiv_rag.generation import gemini
+
+    calls = []
+
+    def complete(prompt, max_tokens=2000, model="", auth=""):
+        calls.append(prompt)
+        if isinstance(reply, Exception):
+            raise reply
+        return reply
+
+    monkeypatch.setattr(config, "GEMINI_API_KEY", "AQ.test")
+    monkeypatch.setattr(gemini, "complete", complete)
+    return calls
+
+
+def test_gemini_repairs_first_and_groq_is_not_asked_again(monkeypatch):
+    calls = _gemini_on(monkeypatch, (TR, 300, "stop"))
+    monkeypatch.setattr(llm, "complete", Script(EN))
+    stats = writer.new_repair_stats()
+    text, tokens, _, attempts = writer.translate_section(EN, "survey", "tr", "m", stats=stats)
+    assert text == TR and tokens == 100 and attempts == 2 and len(calls) == 1
+    assert "Translate the text below into Turkish" in calls[0]
+    assert stats == {"units": 1, "gemini_tried": 1, "gemini_ok": 1, "groq_tried": 0, "groq_ok": 0, "kept": 0}
+
+
+def test_gemini_error_falls_back_to_groq(monkeypatch):
+    from arxiv_rag.generation import gemini
+
+    _gemini_on(monkeypatch, gemini.GeminiUnavailable("HTTP 429"))
+    monkeypatch.setattr(llm, "complete", Script(EN, TR))
+    stats = writer.new_repair_stats()
+    text, tokens, _, _ = writer.translate_section(EN, "survey", "tr", "m", stats=stats)
+    assert text == TR and tokens == 200
+    assert (stats["gemini_tried"], stats["gemini_ok"], stats["groq_tried"], stats["groq_ok"]) == (1, 0, 1, 1)
+
+
+def test_cut_off_gemini_reply_is_not_used(monkeypatch):
+    _gemini_on(monkeypatch, (TR, 300, "length"))
+    monkeypatch.setattr(llm, "complete", Script(EN, TR))
+    stats = writer.new_repair_stats()
+    assert writer.translate_section(EN, "survey", "tr", "m", stats=stats)[0] == TR
+    assert (stats["gemini_ok"], stats["groq_ok"]) == (0, 1)
+
+
+def test_gemini_reply_must_pass_the_same_checks(monkeypatch):
+    _gemini_on(monkeypatch, (TR_BAD, 300, "stop"))
+    monkeypatch.setattr(llm, "complete", Script(EN_T, TR_BAD))
+    stats = writer.new_repair_stats()
+    text, _, _, _ = writer.translate_section(EN_T, "survey", "tr", "m", titles=[TITLE], stats=stats)
+    assert text == EN_T and stats["kept"] == 1 and stats["gemini_ok"] == 0
+
+
+def test_translate_sections_reports_repair_counts(monkeypatch):
+    _gemini_on(monkeypatch, (TR, 300, "stop"))
+    monkeypatch.setattr(llm, "chat", Chat({"terms": []}))
+    monkeypatch.setattr(llm, "complete", Script(EN, TR))
+    _, rows, _, _ = writer.translate_sections(SECTIONS, "survey", "tr", "m", {})
+    assert rows[-1]["section"] == "translate:repairs"
+    assert (rows[-1]["units"], rows[-1]["gemini_ok"], rows[-1]["groq_tried"]) == (1, 1, 0)
