@@ -16,7 +16,7 @@ from arxiv_rag.api.worker import RESTART_MESSAGE, Worker
 from arxiv_rag.generation import document
 from arxiv_rag.storage.arxiv_ids import abs_url
 from arxiv_rag.storage.db import connect
-from arxiv_rag.storage.tex import clean_tex
+from arxiv_rag.storage.tex import clean_authors, clean_tex
 
 
 def default_pipeline(conn, settings: Settings):
@@ -168,7 +168,7 @@ def create_app(
         info = {
             r[0]: {
                 "title": clean_tex(r[1]),
-                "authors": clean_tex(r[2]),
+                "authors": clean_authors(r[2]),
                 "year": (r[3] or "")[:4] or None,
                 "category": r[4],
             }

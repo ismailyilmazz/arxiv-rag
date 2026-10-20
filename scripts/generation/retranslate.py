@@ -16,10 +16,11 @@ def retranslate(report: dict, model: str) -> tuple[str, dict]:
     prefix = writer.DOCUMENT_TYPES[report["doc_type"]]["theme_prefix"][lang]
     themes = [{"name": en, "name_local": local} for en, local in (draft.get("names") or {}).items()]
     names, heading_tokens, from_plan = writer.local_names(themes, lang, model)
-    sections = [
-        {**s, "heading_out": prefix + names[s["key"][6:]]} if s["key"].startswith("theme:") else dict(s)
-        for s in draft["sections"]
-    ]
+    sections = []
+    for s in draft["sections"]:
+        theme = s["key"][6:] if s["key"].startswith("theme:") else None
+        text, _ = writer.drop_repeated_heading(s["text"], [s["heading"], theme])
+        sections.append({**s, "text": text, "heading_out": prefix + names[theme] if theme else s["heading_out"]})
     texts, rows, tokens, glossary = writer.translate_sections(
         sections, draft["label"], lang, model, names, titles=draft.get("titles") or []
     )

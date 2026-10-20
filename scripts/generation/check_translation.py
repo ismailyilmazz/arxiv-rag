@@ -8,7 +8,7 @@ from arxiv_rag.generation import language, writer
 SKIPPED = {"kaynakça", "ileri okuma", "references", "further reading"}
 
 
-TITLE_LINE = re.compile(r"^\[\d+\] .*?\((?:\d{4}|n\.d\.)\)\. (.+)\. arXiv:\S+\. https://arxiv\.org/abs/", re.M)
+TITLE_LINE = re.compile(r"^\[\d+\] .*?\((?:\d{4}|n\.d\.)\)\. (.+?)\.? arXiv:\S+\. https://arxiv\.org/abs/", re.M)
 FURTHER_LINE = re.compile(r"^- (.+) \((?:\d{4}|n\.d\.)\)\. https://arxiv\.org/abs/", re.M)
 
 

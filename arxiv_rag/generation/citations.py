@@ -73,8 +73,10 @@ def format_authors(raw) -> str:
 
 def _entry(s: dict) -> str:
     year = (s.get("published") or "")[:4] or "n.d."
+    title = s["title"].rstrip()
+    end = "" if title.endswith((".", "?", "!")) else "."
     return (
-        f"[{s['n']}] {format_authors(s.get('authors'))} ({year}). {s['title']}. "
+        f"[{s['n']}] {format_authors(s.get('authors'))} ({year}). {title}{end} "
         f"arXiv:{s['id']}. https://arxiv.org/abs/{s['id']}"
     )
 

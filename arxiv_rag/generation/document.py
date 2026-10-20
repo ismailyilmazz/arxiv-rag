@@ -16,7 +16,7 @@ from arxiv_rag.generation import cards, citations, language, llm, scholar, write
 from arxiv_rag.search import bm25
 from arxiv_rag.search.related import related
 from arxiv_rag.storage.arxiv_ids import normalize_id
-from arxiv_rag.storage.tex import clean_tex
+from arxiv_rag.storage.tex import clean_authors, clean_tex
 
 EXPAND_PROMPT = """Topic: {topic}
 
@@ -437,6 +437,10 @@ def select_sources(
         titles.setdefault(pid, conn.execute("SELECT title FROM papers WHERE id = ?", (pid,)).fetchone()[0])
     labels = merge_small(cluster(vectors), vectors)
     themes, tokens["themes"] = name_themes(subject, ids, labels, {pid: titles[pid] for pid in ids}, write_model, lang)
+    if lang != "en" and themes:
+        local, extra, _ = writer.local_names(themes, lang, write_model)
+        themes = [{**t, "name_local": local[t["name"]]} for t in themes]
+        tokens["themes"] += extra
     dropped = [pid for pid in ids if not any(pid in t["ids"] for t in themes)]
     added = backfill(
         conn, pipeline.index, themes, on_topic_scores, set(screened) | set(moved), n_sources, titles, reviews=reviews
@@ -556,7 +560,7 @@ def write_from_selection(
         r[0]: {
             "title": clean_tex(r[1]),
             "abstract": r[2],
-            "authors": clean_tex(r[3]),
+            "authors": clean_authors(r[3]),
             "published": r[4],
             "license": r[5],
         }

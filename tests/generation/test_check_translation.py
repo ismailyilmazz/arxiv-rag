@@ -40,9 +40,13 @@ def test_titles_are_read_from_references_and_further_reading():
     md = (
         "## Kaynakça\n\n[1] Ann Lee, Bo Kim (2003). Quantum cryptography with and without entanglement. "
         "arXiv:quant-ph/0312011. https://arxiv.org/abs/quant-ph/0312011\n\n## İleri okuma\n\n"
+        "[2] Paneru (2019). Entanglement: Quantum or Classical? arXiv:1911.02201. https://arxiv.org/abs/1911.02201\n"
+        "[3] Paneru (2019). Old Format Title?. arXiv:1911.02202. https://arxiv.org/abs/1911.02202\n\n"
         "- Quantum Cryptography: A Survey (n.d.). https://arxiv.org/abs/2003.07907\n"
     )
     assert check_translation.titles_in(md) == [
         "Quantum cryptography with and without entanglement",
+        "Entanglement: Quantum or Classical?",
+        "Old Format Title?",
         "Quantum Cryptography: A Survey",
     ]

@@ -148,7 +148,7 @@ def test_tables_headings_and_short_lines_are_measured():
     found = language.audit(text)
     assert (found["paragraphs"], found["english_paragraphs"]) == (1, 0)
     assert (found["tables"], found["english_tables"]) == (1, 1)
-    assert (found["lines"], found["english_lines"]) == (2, 1)
+    assert (found["lines"], found["english_lines"]) == (3, 2)
     assert language.audit(f"{TR}\n\n**Temsilî Çalışmalar**\n\n{TR_TABLE}")["english_tables"] == 0
 
 
@@ -167,7 +167,10 @@ def test_english_table_left_by_the_translation_is_repaired(monkeypatch):
     monkeypatch.setattr(llm, "complete", fake)
     text, tokens, _, attempts = writer.translate_section(f"{EN}\n\n{EN_TABLE}", "survey", "tr", "m")
     assert text == f"{TR}\n\n{TR_TABLE}" and attempts == 2 and tokens == 200
-    assert EN_TABLE in fake.prompts[1] and "table cell" in fake.prompts[1]
+    assert (
+        EN_TABLE.splitlines()[2] in fake.prompts[1] and "| Çalışma | Yıl | Ana fikir | Ana sonuç |" in fake.prompts[1]
+    )
+    assert "table cell" in fake.prompts[1]
 
 
 def test_translation_prompt_asks_for_table_cells():
@@ -312,3 +315,62 @@ def test_translation_prompts_protect_titles():
     retry = writer.RETRY_TRANSLATE_PROMPT.format(language="Turkish", text="t", glossary="")
     assert "Paper titles are never translated" in prompt and "Work column" in prompt and "Work column" in retry
     assert writer.glossary_rule({"survey": "derleme"}).startswith("\n- Outside paper titles")
+
+
+@pytest.mark.parametrize(
+    "name, words",
+    [
+        ("Entanglement'in Kuantum Kriptografisinde Kullanımı", ["Entanglement"]),
+        ("Post‑Quantum ve Kuantum‑Dirençli Kriptografi", ["Quantum"]),
+        ("Bell'in Eşitsizliği ve QKD Deneyleri", []),
+        ("Kuantum Güvenli Primitiflerin Temelleri", []),
+    ],
+)
+def test_english_words_in_turkish_names(name, words):
+    assert language.english_words(name) == words
+
+
+def test_names_with_english_words_are_translated_again(monkeypatch):
+    fake = Script("Entanglement'in Kuantum Kriptografisinde Kullanımı", "Kuantum Kriptografisinde Dolanıklık")
+    monkeypatch.setattr(llm, "complete", fake)
+    themes = [{"name": "Entanglement in Quantum Cryptography", "name_local": "Entanglement'in Kullanımı"}]
+    local, tokens, from_plan = writer.local_names(themes, "tr", "m")
+    assert local == {"Entanglement in Quantum Cryptography": "Kuantum Kriptografisinde Dolanıklık"}
+    assert from_plan == 0 and tokens == 200 and fake.prompts[1].startswith("Translate this heading")
+
+
+def test_known_table_headers_are_localized_and_unknown_ones_are_measured():
+    table = "| Work | Year | Key idea | Setting or scale | Main result |\n|---|---|---|---|---|\n| T [1] | 1999 | a | b | c |"
+    assert writer.localize_table_headers(table, "tr").splitlines()[0] == (
+        "| Çalışma | Yıl | Ana fikir | Ortam ya da ölçek | Ana sonuç |"
+    )
+    assert writer.localize_table_headers(table, "en") == table
+    odd = "| Dataset | Evaluation setting | Limitations |\n|---|---|---|\n| T [1] | Laboratuvar ölçeği | Küçük veri kümesi |"
+    found = language.audit(odd)
+    assert (found["english_tables"], found["english_lines"]) == (0, 1)
+
+
+def test_glossary_adds_fixed_terms_and_caps_model_terms(monkeypatch):
+    rows = [{"en": f"term number {i}", "target": f"terim {i}"} for i in range(40)]
+    monkeypatch.setattr(llm, "chat", Chat({"terms": rows}))
+    text = "This survey covers attacks [1]. Earlier surveys [2] and a proof-of-concept [3] exist. **A Survey Title**"
+    glossary, _ = writer.build_glossary([text, text], {}, "x", "tr", "m")
+    assert sum(k.startswith("term number") for k in glossary) == writer.GLOSSARY_LIMIT
+    assert glossary["survey"] == "derleme" and glossary["surveys"] == "derlemeler"
+    assert glossary["proof-of-concept"] == "kavram kanıtı"
+    assert "survey" not in writer.build_glossary(["**A Survey Title** [1] is cited."], {}, "x", "tr", "m")[0]
+
+
+def test_quoted_titles_are_protected_and_left_out_of_the_measurement():
+    text = "Bu argüman, “Unconditionally secure quantum bit commitment is impossible” adlı çalışmaya dayanır [16]."
+    title = "Unconditionally secure quantum bit commitment is impossible"
+    assert writer.protected_titles(text, [title]) == {title.lower()}
+    assert language.term_audit(text, {"quantum": "kuantum"})["english_left"] == 0
+
+
+def test_stray_brackets_are_removed_from_the_title():
+    assert (
+        writer.clean_title("Kuantum Kriptografi: Literatür İncelemesi】", "konu")
+        == "Kuantum Kriptografi: Literatür İncelemesi"
+    )
+    assert writer.clean_title("  ", "konu") == "konu"

@@ -97,8 +97,30 @@ Return exactly {n} lines in the same order and nothing else.
 {lines}"""
 
 HEADING_RETRY_PROMPT = """Translate this heading into {language}: {line}
-The result must be a {language} phrase. Only acronyms (such as QKD or BB84) and model names may stay in English.
+The result must be a {language} phrase. Translate technical words too (for example, a Turkish heading says dolanıklık,
+not entanglement). Only acronyms (such as QKD or BB84) and model names may stay in English.
 Return only the translated heading."""
+
+BASE_TERMS = {
+    "tr": {
+        "survey": "derleme",
+        "surveys": "derlemeler",
+        "proof-of-concept": "kavram kanıtı",
+    }
+}
+GLOSSARY_LIMIT = 30
+TABLE_HEADERS = {
+    "tr": {
+        "work": "Çalışma",
+        "year": "Yıl",
+        "key idea": "Ana fikir",
+        "setting or scale": "Ortam ya da ölçek",
+        "setting / scale": "Ortam / ölçek",
+        "setting": "Ortam",
+        "main result": "Ana sonuç",
+        "main finding": "Ana bulgu",
+    }
+}
 
 GLOSSARY_PROMPT = """A {label} will be translated from English into {language} section by section. These words and phrases
 occur often in it:
@@ -122,7 +144,35 @@ def _cells(line: str) -> tuple:
     return tuple(c.strip().lower() for c in line[line.index("|") :].strip().strip("|").split("|"))
 
 
-def tidy_section(text: str) -> tuple[str, bool]:
+def _trim_table_tail(lines: list[str]) -> tuple[list[str], bool]:
+    changed = False
+    while lines and lines[-1].lstrip().startswith("|"):
+        start = len(lines) - 1
+        while start > 0 and lines[start - 1].lstrip().startswith("|"):
+            start -= 1
+        run, tail = lines[start:], lines[-1].strip()
+        if len(run) > 2 and not _SEPARATOR.match(tail) and tail.endswith("|"):
+            cells = _cells(tail)
+            if len(cells) == len(_cells(run[0])) and all(cells):
+                break
+        lines, changed = (lines[:-1] if len(run) > 2 else lines[:start]), True
+        while lines and not lines[-1].strip():
+            lines = lines[:-1]
+    return lines, changed
+
+
+def drop_repeated_heading(text: str, names) -> tuple[str, bool]:
+    lines = text.lstrip().splitlines()
+    wanted = {language.normalize(n) for n in names if n}
+    if not lines or not wanted:
+        return text, False
+    core = lines[0].strip().lstrip("#").strip().strip("*_").strip().rstrip(":.").strip()
+    if language.normalize(core) not in wanted:
+        return text, False
+    return "\n".join(lines[1:]).lstrip(), True
+
+
+def tidy_section(text: str, truncated: bool = False) -> tuple[str, bool]:
     lines, seen, cut = text.rstrip().splitlines(), set(), None
     for i in range(1, len(lines)):
         if _SEPARATOR.match(lines[i]) and "|" in lines[i - 1]:
@@ -135,12 +185,18 @@ def tidy_section(text: str) -> tuple[str, bool]:
     if changed:
         head = lines[cut][: lines[cut].index("|")].rstrip()
         lines = lines[:cut] + ([head] if head else [])
+    if truncated:
+        lines, trimmed = _trim_table_tail(lines)
+        while lines and lines[-1].lstrip().startswith("#"):
+            lines, trimmed = lines[:-1], True
+        changed = changed or trimmed
     body = "\n".join(lines).rstrip()
     last = body.splitlines()[-1].strip() if body else ""
+    kept = ("|",) if truncated else ("|", "-", "*", "#")
     if (
         last
-        and not last.startswith(("|", "-", "*", "#"))
-        and not re.match(r"\d+\.", last)
+        and not last.startswith(kept)
+        and (truncated or not re.match(r"\d+\.", last))
         and not _TERMINAL.search(last)
     ):
         ends = [m.end() for m in re.finditer(r"[.!?](\s*\[[\d,\s\u2013-]+\])?[.]?(?=\s|$)", body)]
@@ -161,7 +217,7 @@ def protected_titles(source: str, titles=()) -> set[str]:
     known = {language.normalize(t) for t in titles if t and t.strip()}
     found = set()
     for match in language.SPAN.finditer(source):
-        span = language.normalize(match.group(1) or match.group(2))
+        span = language.normalize(next(g for g in match.groups() if g))
         if span in known or (len(span) >= 20 and any(span in t for t in known)):
             found.add(span)
         else:
@@ -191,6 +247,21 @@ def _table_runs(lines: list[str]) -> list[tuple[int, int]]:
             runs.append((start, i))
             start = None
     return runs
+
+
+def localize_table_headers(text: str, lang: str) -> str:
+    names = TABLE_HEADERS.get(lang)
+    if not names or "|" not in text:
+        return text
+    lines = text.splitlines()
+    for start, _ in _table_runs(lines):
+        cells = _cells_of(lines[start])
+        lines[start] = "| " + " | ".join(names.get(" ".join(c.lower().split()), c) for c in cells) + " |"
+    return "\n".join(lines)
+
+
+def fix_tables(translated: str, source: str, lang: str) -> str:
+    return localize_table_headers(keep_work_column(translated, source), lang)
 
 
 def keep_work_column(translated: str, source: str) -> str:
@@ -230,7 +301,7 @@ def repair_paragraphs(
         prompt = RETRY_TRANSLATE_PROMPT.format(language=LANGUAGES[lang], text=block, glossary=glossary_rule(glossary))
         for _ in range(2):
             piece, extra, _ = _call(prompt, model, 2000)
-            piece, tokens = keep_work_column(strip_meta_notes(piece.strip()), block), tokens + extra
+            piece, tokens = fix_tables(strip_meta_notes(piece.strip()), block, lang), tokens + extra
             if piece and is_complete(piece, block, titles=titles) and not language.block_is_english(piece):
                 blocks[i], repaired = piece, repaired + 1
                 break
@@ -250,7 +321,7 @@ def translate_section(
     out = strip_meta_notes(out)
     if lang == "en":
         return out, tokens, truncated, 1
-    out = keep_work_column(out, text)
+    out = fix_tables(out, text, lang)
     if truncated or not is_complete(out, text, titles=titles):
         out, extra, _, _ = repair_paragraphs(text, lang, model, tables=True, glossary=glossary, titles=titles)
         return out, tokens + extra, False, 2
@@ -295,7 +366,7 @@ def translate_lines(lines: list[str], lang: str, model: str) -> tuple[list[str],
     got, tokens = _ask_headings(lines, lang, model)
     result = got if len(got) == len(lines) else list(lines)
     for i, line in enumerate(lines):
-        if not same_text(result[i], line):
+        if not same_text(result[i], line) and not language.english_words(result[i]):
             continue
         text, extra, _ = llm.complete(
             HEADING_RETRY_PROMPT.format(language=LANGUAGES[lang], line=line), model=model, max_tokens=400
@@ -303,7 +374,10 @@ def translate_lines(lines: list[str], lang: str, model: str) -> tuple[list[str],
         tokens += extra
         single = _heading_lines(text)
         if len(single) == 1 and plausible_heading(single[0], line):
-            result[i] = single[0]
+            if same_text(result[i], line) or len(language.english_words(single[0])) < len(
+                language.english_words(result[i])
+            ):
+                result[i] = single[0]
     return result, tokens
 
 
@@ -324,6 +398,16 @@ def build_glossary(texts: list[str], names: dict, label: str, lang: str, model: 
             en, target = str(row.get("en") or "").strip(), str(row.get("target") or "").strip()
             if en and target and len(en) <= 60 and len(target) <= 60 and not en.isupper():
                 glossary[en] = target
+            if len(glossary) >= GLOSSARY_LIMIT:
+                break
+    plain = language._translatable("\n\n".join(texts)).lower()
+    glossary.update(
+        {
+            en: target
+            for en, target in BASE_TERMS.get(lang, {}).items()
+            if re.search(rf"(?<![a-z]){re.escape(en)}(?![a-z])", plain)
+        }
+    )
     glossary.update({en: local for en, local in names.items() if en and local and not same_text(en, local)})
     return glossary, tokens
 
@@ -621,12 +705,17 @@ def material_for(kind: str, sources: list[dict], themes: list[dict], written: li
     return so_far.strip()
 
 
+def clean_title(title: str, fallback: str) -> str:
+    title = re.sub(r"[\u3010\u3011\u300c\u300d\u300e\u300f\u300a\u300b]", "", title)
+    return title.strip().strip('"').strip("#").strip() or fallback
+
+
 def local_names(themes: list[dict], lang: str, model: str) -> tuple[dict, int, int]:
     english = [t["name"] for t in themes]
     if lang == "en":
         return dict(zip(english, english)), 0, 0
     local = {t["name"]: (t.get("name_local") or "").strip() for t in themes}
-    missing = [en for en in english if not local[en] or same_text(local[en], en)]
+    missing = [en for en in english if not local[en] or same_text(local[en], en) or language.english_words(local[en])]
     translated, tokens = translate_lines(missing, lang, model)
     local.update(zip(missing, translated))
     return local, tokens, len(english) - len(missing)
@@ -687,10 +776,20 @@ def write_document(
             extra=DOCUMENT_RULES.format(topic=topic),
         )
         text, tokens, truncated = _call(prompt, model, item["tokens"])
-        text, tidied = tidy_section(text.strip())
+        text, tidied = tidy_section(text.strip(), truncated)
+        text, repeated = drop_repeated_heading(
+            text, [item["heading"], item["theme"]["name"] if item["theme"] else None]
+        )
         used += tokens
         report.append(
-            {"section": item["key"], "source": None, "tokens": tokens, "truncated": truncated, "tidied": tidied}
+            {
+                "section": item["key"],
+                "source": None,
+                "tokens": tokens,
+                "truncated": truncated,
+                "tidied": tidied or repeated,
+                "trimmed": truncated and tidied,
+            }
         )
         texts[item["key"]] = text
         written.append((item["heading"], text))
@@ -716,7 +815,7 @@ def write_document(
         TITLE_PROMPT.format(language=LANGUAGES[lang], label=label, written=summary_of(written)), model, 300
     )
     used += tokens
-    title = title.strip().strip('"').strip("#").strip() or topic
+    title = clean_title(title, topic)
     draft["title"] = title
     body = "\n\n".join(f"## {p['heading_out']}\n\n{texts[p['key']]}" for p in plan)
     return f"# {title}\n\n{body}\n", used, report, draft

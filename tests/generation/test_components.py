@@ -321,3 +321,15 @@ def test_derived_sections_tie_points_to_sources_and_survey_states_scope():
         "with [n]" in sections["survey"]["open"]["task"] and "with [n]" in sections["synthesis"]["implications"]["task"]
     )
     assert "does not cover the whole field" in sections["survey"]["intro"]["task"]
+
+
+def test_bibliography_does_not_double_the_final_punctuation():
+    source = {
+        "n": 1,
+        "id": "1911.02201",
+        "title": "Entanglement: Quantum or Classical?",
+        "authors": "A",
+        "published": "2019",
+    }
+    entry = citations.bibliography([source], "en").splitlines()[2]
+    assert "Classical? arXiv:1911.02201." in entry and "?." not in entry

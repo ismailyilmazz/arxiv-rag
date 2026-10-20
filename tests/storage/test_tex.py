@@ -1,6 +1,6 @@
 import pytest
 
-from arxiv_rag.storage.tex import clean_tex
+from arxiv_rag.storage.tex import clean_authors, clean_tex
 
 
 @pytest.mark.parametrize(
@@ -36,3 +36,20 @@ def test_other_text_is_untouched(text):
 
 def test_none_becomes_empty():
     assert clean_tex(None) == ""
+
+
+@pytest.mark.parametrize(
+    "raw, clean",
+    [
+        ("Peter W. Shor (AT&T Labs Research), John Preskill (Caltech)", "Peter W. Shor, John Preskill"),
+        (
+            'Thomas Jennewein (1), Christoph Simon (1), Harald Weinfurter (2) ((1) Univ. Wien, (2) LMU M\\"unchen)',
+            "Thomas Jennewein, Christoph Simon, Harald Weinfurter",
+        ),
+        ("Dominic Mayers (Princeton University)", "Dominic Mayers"),
+        ("Hoi-Kwong Lo, H. F. Chau", "Hoi-Kwong Lo, H. F. Chau"),
+        (None, ""),
+    ],
+)
+def test_affiliations_are_removed_from_authors(raw, clean):
+    assert clean_authors(raw) == clean

@@ -168,8 +168,8 @@ STOP = EN_WORDS | {
 SEPARATOR = re.compile(r"^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$")
 HYPHENS = str.maketrans({"\u2010": "-", "\u2011": "-", "\u2012": "-", "\u2013": "-"})
 TERM = re.compile(r"[A-Za-z][A-Za-z-]*[A-Za-z]")
-MARKED = re.compile(r"\*\*[^*]+\*\*|\*[^*\s][^*]*\*|\[[\d,\s\u2013-]+\]")
-SPAN = re.compile(r"\*\*([^*]+)\*\*|\*([^*\s][^*]*)\*")
+MARKED = re.compile(r"\*\*[^*]+\*\*|\*[^*\s][^*]*\*|\[[\d,\s\u2013-]+\]|\u201c[^\u201d\n]+\u201d|\"[^\"\n]+\"")
+SPAN = re.compile(r"\*\*([^*]+)\*\*|\*([^*\s][^*]*)\*|\u201c([^\u201d\n]+)\u201d|\"([^\"\n]+)\"")
 
 
 def normalize(text: str) -> str:
@@ -188,6 +188,15 @@ def _english_signal(word: str) -> bool:
     return word in EN_WORDS or any(c in "qwx" for c in word) or (len(word) > 4 and word.endswith(EN_SUFFIXES))
 
 
+def english_words(text: str) -> list[str]:
+    plain = re.sub(r"['\u2019][A-Za-zçğıöşüÇĞİÖŞÜ]+", "", MARKED.sub(" ", text.translate(HYPHENS)))
+    return [
+        w
+        for w in WORD.findall(plain)
+        if not w.isupper() and not any(c in TR_CHARS for c in w) and _english_signal(w.lower())
+    ]
+
+
 def text_is_english(text: str) -> bool:
     words = [w for w in WORD.findall(text) if not w.isupper()]
     if not words:
@@ -202,7 +211,7 @@ def text_is_english(text: str) -> bool:
 
 def table_text(lines: list[str]) -> str:
     cells = []
-    for line in lines:
+    for line in lines[1:]:
         if SEPARATOR.match(line):
             continue
         cells += [MARKED.sub(" ", c).strip() for c in line.strip().strip("|").split("|")][1:]
@@ -216,6 +225,7 @@ def units(text: str) -> list[tuple[str, str]]:
         table = [line for line in lines if line.startswith("|")]
         if table:
             out.append(("table", table_text(table)))
+            out.append(("line", MARKED.sub(" ", " ".join(table[0].strip().strip("|").split("|"))).strip()))
         out += [("line", MARKED.sub(" ", line.lstrip("#")).strip()) for line in lines if line.startswith("#")]
         prose = " ".join(MARKED.sub(" ", " ".join(line for line in lines if not line.startswith(("|", "#")))).split())
         if prose:
@@ -260,7 +270,7 @@ def audit(text: str) -> dict:
     }
 
 
-def frequent_terms(text: str, unigrams: int = 25, bigrams: int = 15, min_count: int = 2) -> list[str]:
+def frequent_terms(text: str, unigrams: int = 40, bigrams: int = 25, min_count: int = 2) -> list[str]:
     text = _translatable(text)
     ones, twos = {}, {}
     for sentence in re.split(r"[.!?;:()|\n]+", text):

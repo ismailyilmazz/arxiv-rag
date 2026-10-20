@@ -46,6 +46,16 @@ def _accent(match: re.Match) -> str:
     return base + ACCENTS[match.group(1)]
 
 
+PAREN = re.compile(r"\s*\([^()]*\)")
+
+
+def clean_authors(text: Optional[str]) -> str:
+    out = clean_tex(text)
+    while PAREN.search(out):
+        out = PAREN.sub("", out)
+    return re.sub(r"\s+,", ",", " ".join(out.split())).strip(" ,")
+
+
 def clean_tex(text: Optional[str]) -> str:
     if not text or "\\" not in text and "{" not in text:
         return text or ""

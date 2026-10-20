@@ -1,0 +1,739 @@
+{
+  "topic": "Kuantum Dolanıklık ve Kuantum Kriptografi Sistemlerinin Güvenliği",
+  "focus": null,
+  "doc_type": "survey",
+  "lang": "tr",
+  "queries": [
+    "Kuantum Dolanıklık ve Kuantum Kriptografi Sistemlerinin Güvenliği",
+    "quantum entanglement fundamentals",
+    "quantum cryptography protocols security",
+    "experimental verification quantum key distribution",
+    "quantum-resistant cryptographic systems",
+    "limitations open problems quantum cryptography"
+  ],
+  "rejected_queries": [],
+  "scholar": {
+    "ok": true,
+    "anchors": [
+      "quant-ph/0312011",
+      "quant-ph/9912117",
+      "0806.3483"
+    ],
+    "reference_additions": 30,
+    "references_rejected": 67,
+    "with_citations": 145,
+    "anchor_errors": [
+      "quant-ph/0312011: HTTPError: HTTP Error 400: Bad Request"
+    ],
+    "anchor_references": {
+      "quant-ph/9912117": {
+        "arxiv_linked": 0,
+        "in_corpus": 0
+      },
+      "0806.3483": {
+        "arxiv_linked": 121,
+        "in_corpus": 121
+      }
+    },
+    "references_by_term": 22,
+    "review_typed": 39,
+    "relevance_gates": {
+      "references": 0.9063,
+      "keep": 0.882
+    },
+    "topic_terms": [
+      "cryptographi",
+      "entangl",
+      "secur"
+    ]
+  },
+  "candidates": 146,
+  "off_topic_candidates": 12,
+  "screened": 30,
+  "surveys_moved": [
+    "2003.07907",
+    "1805.06668",
+    "2312.10430",
+    "quant-ph/0702225",
+    "0802.4155"
+  ],
+  "dropped_by_themes": [],
+  "backfilled": [],
+  "removed_ids": [],
+  "candidate_ids": [
+    "quant-ph/0312011",
+    "quant-ph/9912117",
+    "0806.3483",
+    "2009.04155",
+    "2003.07907",
+    "2012.14275",
+    "quant-ph/0206170",
+    "quant-ph/9703035",
+    "0712.3999",
+    "quant-ph/0008051",
+    "2510.24534",
+    "physics/0007090",
+    "2406.08833",
+    "2007.08567",
+    "0802.1811",
+    "1009.2256",
+    "quant-ph/0601207",
+    "2603.02375",
+    "quant-ph/0511163",
+    "quant-ph/0702202",
+    "quant-ph/0107156",
+    "quant-ph/0610253",
+    "quant-ph/0702225",
+    "1911.02201",
+    "2404.09441",
+    "2402.09523",
+    "2511.09507",
+    "1803.04993",
+    "quant-ph/0202122",
+    "2507.23108",
+    "1905.00258",
+    "2208.02518",
+    "2201.13310",
+    "2011.10945",
+    "2403.16339",
+    "1506.04262",
+    "1109.3542",
+    "quant-ph/0106119",
+    "quant-ph/0210107",
+    "2502.10963",
+    "1505.02792",
+    "1102.0885",
+    "quant-ph/0110053",
+    "1705.02417",
+    "1805.06668",
+    "2102.00021",
+    "2401.08987",
+    "0710.4884",
+    "quant-ph/0310168",
+    "1112.2230",
+    "2112.00399",
+    "1507.01625",
+    "1208.6198",
+    "2206.10473",
+    "quant-ph/0111097",
+    "2403.19299",
+    "quant-ph/0108133",
+    "0802.4155",
+    "quant-ph/0605118",
+    "quant-ph/0611153",
+    "0712.0517",
+    "1210.7556",
+    "2109.14600",
+    "1210.6520",
+    "1408.0563",
+    "2604.21791",
+    "0904.1994",
+    "2602.01500",
+    "1710.07979",
+    "2112.12292",
+    "quant-ph/9901061",
+    "0805.3629",
+    "2506.03549",
+    "1308.3241",
+    "quant-ph/0609164",
+    "cs/0502048",
+    "1504.05471",
+    "2512.19005",
+    "2508.00832",
+    "2407.18966",
+    "2605.04129",
+    "2312.10430",
+    "2609.11991",
+    "2403.11741",
+    "2411.09995",
+    "2509.06127",
+    "2508.17296",
+    "2509.22757",
+    "2507.13720",
+    "2508.16078",
+    "2601.14926",
+    "2601.11104",
+    "2501.11798",
+    "2202.02826",
+    "2310.05641",
+    "1510.06120",
+    "2204.11502",
+    "2506.02028",
+    "2306.09248",
+    "2302.01026",
+    "2311.08211",
+    "1910.05368",
+    "2411.08877",
+    "quant-ph/0101098",
+    "quant-ph/0504166",
+    "1004.3345",
+    "2211.17089",
+    "1906.01645",
+    "2409.15248",
+    "1804.00200",
+    "quant-ph/0404115",
+    "quant-ph/0101079",
+    "quant-ph/0211098",
+    "1106.2910",
+    "quant-ph/0008039",
+    "0710.1348",
+    "0803.2507",
+    "quant-ph/0003004",
+    "quant-ph/9803006",
+    "quant-ph/0512258",
+    "quant-ph/9901025",
+    "quant-ph/9605044",
+    "quant-ph/9603004",
+    "quant-ph/0404076",
+    "quant-ph/0103098",
+    "quant-ph/0511088",
+    "quant-ph/9611031",
+    "quant-ph/0403133",
+    "quant-ph/0307104",
+    "quant-ph/0003059",
+    "quant-ph/0211089",
+    "quant-ph/0111046",
+    "quant-ph/9601020",
+    "quant-ph/0508222",
+    "quant-ph/9711065",
+    "quant-ph/0409078",
+    "quant-ph/0203004",
+    "quant-ph/0604183",
+    "quant-ph/0106019",
+    "quant-ph/0310088",
+    "quant-ph/0409201",
+    "quant-ph/0512021",
+    "quant-ph/0004017",
+    "quant-ph/0305154",
+    "cs/0102013",
+    "quant-ph/0404075"
+  ],
+  "screened_ids": [
+    "quant-ph/0312011",
+    "0806.3483",
+    "quant-ph/0601207",
+    "quant-ph/0702202",
+    "0803.2507",
+    "physics/0007090",
+    "2201.13310",
+    "2112.00399",
+    "1705.02417",
+    "2510.24534",
+    "1804.00200",
+    "2403.11741",
+    "2411.09995",
+    "quant-ph/9901025",
+    "quant-ph/9605044",
+    "quant-ph/9603004",
+    "quant-ph/0103098",
+    "quant-ph/0403133",
+    "quant-ph/9611031",
+    "quant-ph/0307104",
+    "quant-ph/0003059",
+    "quant-ph/0211089",
+    "quant-ph/9912117",
+    "quant-ph/0003004",
+    "quant-ph/0512258",
+    "quant-ph/9803006",
+    "2109.14600",
+    "quant-ph/0404115",
+    "quant-ph/0511163",
+    "quant-ph/0008039"
+  ],
+  "relevance": {
+    "quant-ph/0312011": 0.9701,
+    "0806.3483": 0.9744,
+    "quant-ph/0601207": 0.9711,
+    "quant-ph/0702202": 0.9701,
+    "0803.2507": 0.9524,
+    "physics/0007090": 0.9494,
+    "2201.13310": 0.8868,
+    "2112.00399": 0.9577,
+    "1705.02417": 0.9523,
+    "2510.24534": 0.9446,
+    "1804.00200": 0.9578,
+    "2403.11741": 0.9572,
+    "2411.09995": 0.9154,
+    "quant-ph/9901025": 0.9126,
+    "quant-ph/9605044": 0.9295,
+    "quant-ph/9603004": 0.9302,
+    "quant-ph/0103098": 0.9137,
+    "quant-ph/0403133": 0.9195,
+    "quant-ph/9611031": 0.9261,
+    "quant-ph/0307104": 0.91,
+    "quant-ph/0003059": 0.9361,
+    "quant-ph/0211089": 0.887,
+    "quant-ph/9912117": 0.9472,
+    "quant-ph/0003004": 0.9325,
+    "quant-ph/0512258": 0.9211,
+    "quant-ph/9803006": 0.922,
+    "2109.14600": 0.931,
+    "quant-ph/0404115": 0.9204,
+    "quant-ph/0511163": 0.9222,
+    "quant-ph/0008039": 0.912
+  },
+  "themes": [
+    {
+      "name": "Entanglement in Quantum Cryptography",
+      "name_local": "Entanglement'in Kuantum Kriptografisinde Kullanımı",
+      "size": 7,
+      "deep": [
+        "quant-ph/0312011",
+        "0806.3483"
+      ]
+    },
+    {
+      "name": "Post‑Quantum and Quantum‑Resistant Cryptography",
+      "name_local": "Post‑Quantum ve Kuantum‑Dirençli Kriptografi",
+      "size": 6,
+      "deep": [
+        "2403.11741"
+      ]
+    },
+    {
+      "name": "Foundations and Limits of Quantum Secure primitives",
+      "name_local": "Kuantum Güvenli Primitiflerin Temelleri ve Sınırları",
+      "size": 9,
+      "deep": [
+        "quant-ph/9603004"
+      ]
+    },
+    {
+      "name": "Entanglement‑Based QKD Experiments",
+      "name_local": "Entanglement‑Tabanlı QKD Deneyleri",
+      "size": 8,
+      "deep": [
+        "quant-ph/9912117"
+      ]
+    }
+  ],
+  "deep": [
+    "quant-ph/0312011",
+    "quant-ph/9912117",
+    "0806.3483",
+    "2403.11741",
+    "quant-ph/9603004"
+  ],
+  "cited": [
+    "quant-ph/9912117",
+    "quant-ph/0312011",
+    "2403.11741",
+    "quant-ph/9603004",
+    "0806.3483",
+    "quant-ph/0601207",
+    "quant-ph/0702202",
+    "0803.2507",
+    "physics/0007090",
+    "2201.13310",
+    "2112.00399",
+    "1705.02417",
+    "2510.24534",
+    "1804.00200",
+    "2411.09995",
+    "quant-ph/9605044",
+    "quant-ph/9901025",
+    "quant-ph/0103098",
+    "quant-ph/0403133",
+    "quant-ph/0307104",
+    "quant-ph/0003059",
+    "quant-ph/0211089",
+    "quant-ph/0008039",
+    "quant-ph/0404115",
+    "quant-ph/0511163",
+    "2109.14600",
+    "quant-ph/0003004",
+    "quant-ph/0512258",
+    "quant-ph/9803006"
+  ],
+  "further_reading": [
+    "quant-ph/9611031",
+    "2003.07907",
+    "1805.06668",
+    "2312.10430",
+    "quant-ph/0702225",
+    "0802.4155"
+  ],
+  "citations": {
+    "citations_found": 84,
+    "invalid_numbers": [],
+    "uncited_sources": [
+      20
+    ],
+    "paragraphs": 50,
+    "uncited_paragraphs": 13,
+    "removed_model_references": false,
+    "name_mismatches": {
+      "count": 0,
+      "examples": []
+    },
+    "focus_drift": {
+      "count": 0,
+      "examples": []
+    },
+    "meta_language": {
+      "count": 0,
+      "examples": []
+    },
+    "number_audit": {
+      "checked": 9,
+      "unsupported": 0,
+      "examples": []
+    },
+    "language": {
+      "paragraphs": 55,
+      "english_paragraphs": 0,
+      "english_share": 0.0,
+      "tables": 1,
+      "english_tables": 0,
+      "lines": 10,
+      "english_lines": 0,
+      "examples": []
+    },
+    "terms": {
+      "terms": 44,
+      "english_left": 25,
+      "examples": {
+        "quantum": 14,
+        "bit commitment": 2,
+        "quantum bit": 2,
+        "entanglement": 2,
+        "commitment": 2
+      }
+    }
+  },
+  "sections": [
+    {
+      "section": "translate:headings",
+      "source": null,
+      "tokens": 0,
+      "truncated": false,
+      "tidied": false,
+      "translated": 4,
+      "of": 4,
+      "from_plan": 4
+    },
+    {
+      "section": "intro",
+      "source": null,
+      "tokens": 2294,
+      "truncated": false,
+      "tidied": false
+    },
+    {
+      "section": "background",
+      "source": null,
+      "tokens": 2448,
+      "truncated": false,
+      "tidied": false
+    },
+    {
+      "section": "theme:Entanglement in Quantum Cryptography",
+      "source": null,
+      "tokens": 3208,
+      "truncated": false,
+      "tidied": false
+    },
+    {
+      "section": "theme:Post‑Quantum and Quantum‑Resistant Cryptography",
+      "source": null,
+      "tokens": 2538,
+      "truncated": false,
+      "tidied": false
+    },
+    {
+      "section": "theme:Foundations and Limits of Quantum Secure primitives",
+      "source": null,
+      "tokens": 2847,
+      "truncated": false,
+      "tidied": false
+    },
+    {
+      "section": "theme:Entanglement‑Based QKD Experiments",
+      "source": null,
+      "tokens": 2935,
+      "truncated": false,
+      "tidied": false
+    },
+    {
+      "section": "comparison",
+      "source": null,
+      "tokens": 4436,
+      "truncated": false,
+      "tidied": false
+    },
+    {
+      "section": "open",
+      "source": null,
+      "tokens": 2964,
+      "truncated": false,
+      "tidied": false
+    },
+    {
+      "section": "conclusion",
+      "source": null,
+      "tokens": 2479,
+      "truncated": false,
+      "tidied": false
+    },
+    {
+      "section": "translate:glossary",
+      "source": null,
+      "tokens": 988,
+      "truncated": false,
+      "tidied": false,
+      "terms": 44
+    },
+    {
+      "section": "translate:intro",
+      "source": null,
+      "tokens": 2271,
+      "truncated": false,
+      "tidied": false,
+      "attempts": 1,
+      "english_share": 0.0,
+      "english_left": 0
+    },
+    {
+      "section": "translate:background",
+      "source": null,
+      "tokens": 2882,
+      "truncated": false,
+      "tidied": false,
+      "attempts": 1,
+      "english_share": 0.0,
+      "english_left": 0
+    },
+    {
+      "section": "translate:theme:Entanglement in Quantum Cryptography",
+      "source": null,
+      "tokens": 3952,
+      "truncated": false,
+      "tidied": false,
+      "attempts": 1,
+      "english_share": 0.0,
+      "english_left": 0
+    },
+    {
+      "section": "translate:theme:Post‑Quantum and Quantum‑Resistant Cryptography",
+      "source": null,
+      "tokens": 3063,
+      "truncated": false,
+      "tidied": false,
+      "attempts": 1,
+      "english_share": 0.0,
+      "english_left": 0
+    },
+    {
+      "section": "translate:theme:Foundations and Limits of Quantum Secure primitives",
+      "source": null,
+      "tokens": 3095,
+      "truncated": false,
+      "tidied": false,
+      "attempts": 1,
+      "english_share": 0.0,
+      "english_left": 0
+    },
+    {
+      "section": "translate:theme:Entanglement‑Based QKD Experiments",
+      "source": null,
+      "tokens": 3197,
+      "truncated": false,
+      "tidied": false,
+      "attempts": 1,
+      "english_share": 0.0,
+      "english_left": 0
+    },
+    {
+      "section": "translate:comparison",
+      "source": null,
+      "tokens": 2371,
+      "truncated": false,
+      "tidied": false,
+      "attempts": 1,
+      "english_share": 0.0,
+      "english_left": 0
+    },
+    {
+      "section": "translate:open",
+      "source": null,
+      "tokens": 2343,
+      "truncated": false,
+      "tidied": false,
+      "attempts": 1,
+      "english_share": 0.0,
+      "english_left": 0
+    },
+    {
+      "section": "translate:conclusion",
+      "source": null,
+      "tokens": 2256,
+      "truncated": false,
+      "tidied": false,
+      "attempts": 1,
+      "english_share": 0.0,
+      "english_left": 0
+    }
+  ],
+  "tokens": {
+    "expand": 281,
+    "themes": 969,
+    "cards": 7940,
+    "write": 53471,
+    "total": 62661
+  },
+  "timings_ms": {
+    "retrieval_ms": 32234,
+    "cards_ms": 68760,
+    "write_ms": 946466,
+    "total_ms": 1047560
+  },
+  "length": {
+    "words": 4571,
+    "truncated": false
+  },
+  "draft": {
+    "label": "literature review on Kuantum Dolanıklık ve Kuantum Kriptografi Sistemlerinin Güvenliği",
+    "lang": "tr",
+    "names": {
+      "Entanglement in Quantum Cryptography": "Entanglement'in Kuantum Kriptografisinde Kullanımı",
+      "Post‑Quantum and Quantum‑Resistant Cryptography": "Post‑Quantum ve Kuantum‑Dirençli Kriptografi",
+      "Foundations and Limits of Quantum Secure primitives": "Kuantum Güvenli Primitiflerin Temelleri ve Sınırları",
+      "Entanglement‑Based QKD Experiments": "Entanglement‑Tabanlı QKD Deneyleri"
+    },
+    "titles": [
+      "Quantum cryptography with and without entanglement",
+      "Quantum Cryptography with Entangled Photons",
+      "Cryptography in a Quantum World",
+      "Post-Quantum Cryptography: Securing Digital Communication in the Quantum Era",
+      "Is Quantum Bit Commitment Really Possible?",
+      "Quantum Cryptography",
+      "Quantum Cryptography: from Theory to Practice",
+      "Quantum Cryptography",
+      "Entanglement versus disentanglement: Quantum Cryptography",
+      "Lectures on entanglement in quantum field theory",
+      "Quantum-Resistant Cryptography",
+      "Quantum Security of Cryptographic Primitives",
+      "Quantum-Resistant Networks Using Post-Quantum Cryptography",
+      "The Impact of Quantum Computing on Present Cryptography",
+      "Strategic Roadmap for Quantum- Resistant Security: A Framework for Preparing Industries for the Quantum Threat",
+      "How to share a quantum secret",
+      "Unconditionally secure quantum bit commitment is impossible",
+      "Quantum Data Hiding",
+      "Universally composable privacy amplification against quantum adversaries",
+      "Insecurity of Quantum Secure Computations",
+      "Randomizing quantum states: Constructions and applications",
+      "Optimal Encryption of Quantum Bits",
+      "Characterizing quantum theory in terms of information-theoretic constraints",
+      "Simple Proof of Security of the BB84 Quantum Key Distribution Protocol",
+      "Security of Quantum Key Distribution",
+      "Unconditional Security Of Quantum Key Distribution Over Arbitrarily Long Distances",
+      "Experimental quantum key distribution certified by Bell's theorem",
+      "Practical Quantum Key Distribution with Polarization-Entangled Photons",
+      "Experimental Quantum Cryptography with Qutrits",
+      "Long distance entanglement based quantum key distribution"
+    ],
+    "glossary": {
+      "bit commitment": "bit taahhüdü",
+      "security proofs": "güvenlik ispatları",
+      "key distribution": "anahtar dağıtımı",
+      "quantum bit": "kuantum biti",
+      "quantum computers": "kuantum bilgisayarlar",
+      "shor algorithm": "Shor algoritması",
+      "entangled photons": "dolanık fotonlar",
+      "entangled states": "dolanık durumlar",
+      "photon pairs": "foton çiftleri",
+      "quantum adversaries": "kuantum düşmanları",
+      "quantum mechanics": "kuantum mekaniği",
+      "security analyses": "güvenlik analizleri",
+      "entangled photon": "dolanık foton",
+      "entanglement-based quantum": "dolanıklık‑temelli kuantum",
+      "information-theoretic security": "bilgi‑teorik güvenlik",
+      "quantum": "kuantum",
+      "security": "güvenlik",
+      "entanglement": "dolanıklık",
+      "entanglement-based": "dolanıklık‑temelli",
+      "experimental": "deneysel",
+      "theoretical": "kuramsal",
+      "entangled": "dolanık",
+      "schemes": "şemalar",
+      "classical": "klasik",
+      "cryptographic": "kriptografik",
+      "protocols": "protokoller",
+      "authors": "yazarlar",
+      "practical": "pratik",
+      "primitives": "primitifler",
+      "protocol": "protokol",
+      "commitment": "taahhüt",
+      "photons": "fotonlar",
+      "rates": "hızlar",
+      "algorithms": "algoritmalar",
+      "limits": "sınırlamalar",
+      "attacks": "saldırılar",
+      "cryptography": "kriptografi",
+      "impossibility": "imkansızlık",
+      "secure": "güvenli",
+      "analysis": "analiz",
+      "Entanglement in Quantum Cryptography": "Entanglement'in Kuantum Kriptografisinde Kullanımı",
+      "Post‑Quantum and Quantum‑Resistant Cryptography": "Post‑Quantum ve Kuantum‑Dirençli Kriptografi",
+      "Foundations and Limits of Quantum Secure primitives": "Kuantum Güvenli Primitiflerin Temelleri ve Sınırları",
+      "Entanglement‑Based QKD Experiments": "Entanglement‑Tabanlı QKD Deneyleri"
+    },
+    "sections": [
+      {
+        "key": "intro",
+        "heading": "Introduction",
+        "heading_out": "Giriş",
+        "text": "The rapid progress of quantum technologies has transformed the landscape of secure communication, raising both new opportunities and fresh threats.  Quantum key distribution (QKD) promises information‑theoretic confidentiality, yet its practical implementation must grapple with the subtleties of entanglement generation, device imperfections, and the emergence of quantum‑enabled attacks on classical schemes.  At the same time, the prospect of large‑scale quantum computers threatens the mathematical foundations of widely deployed public‑key infrastructures, motivating a vigorous search for algorithms that remain hard for quantum adversaries.  Understanding how entanglement influences protocol design, how post‑quantum constructions can safeguard digital traffic, and what fundamental limits govern quantum‑secure primitives therefore constitutes a pressing research agenda for the security of quantum‑based cryptographic systems.\n\nThis literature review concentrates on a curated set of thirty peer‑reviewed works that illustrate the current state of research on **Kuantum Dolanıklık ve Kuantum Kriptografi Sistemlerinin Güvenliği**.  The selection is deliberately scoped: it does not aim to be exhaustive, but rather to capture representative contributions across four interrelated themes that together outline the theoretical and experimental foundations of the field.\n\nThe first theme, **Entanglement in Quantum Cryptography**, gathers studies that examine how the presence—or intentional absence—of entanglement shapes the design, analysis, and implementation of cryptographic protocols.  Early experimental demonstrations of entangled‑photon QKD [2] and subsequent analyses of the transition from entangled to practical non‑entangled schemes [1] illustrate the central role of entanglement in both intuition and engineering.  The second theme, **Post‑Quantum and Quantum‑Resistant Cryptography**, addresses cryptographic constructions that are intended to resist attacks by quantum computers.  Recent surveys of lattice‑, code‑, hash‑, and multivariate‑based schemes [4] provide a comprehensive overview of this emerging defensive frontier.\n\nThe third theme, **Foundations and Limits of Quantum Secure Primitives**, focuses on the theoretical underpinnings of quantum cryptographic building blocks such as bit‑commitment, data hiding, and privacy amplification.  Foundational impossibility results for quantum bit commitment [5] and broader investigations of uncertainty‑relation‑based security analyses [3] highlight both the power and the constraints of quantum information processing.  Finally, the fourth theme, **Entanglement‑Based QKD Experiments**, compiles experimental implementations and rigorous security proofs for protocols that explicitly rely on entangled photon pairs or higher‑dimensional entangled states, showcasing the feasibility of entanglement‑driven key distribution in realistic settings.\n\nBy organizing the selected works into these four sequential themes, the review first establishes how entanglement informs protocol concepts, then surveys defensive strategies against quantum adversaries, proceeds to the fundamental limits of quantum‑secure primitives, and concludes with concrete experimental realizations of entanglement‑based QKD.  This structure enables a coherent narrative that moves from abstract theory to practical deployment, while clearly delineating the scope of the surveyed literature."
+      },
+      {
+        "key": "background",
+        "heading": "Background",
+        "heading_out": "Arka Plan",
+        "text": "Quantum cryptography rests on the ability to encode information in individual quantum systems and to exploit the fundamental laws of quantum mechanics—most notably the no‑cloning theorem, measurement disturbance, and entanglement—to guarantee confidentiality and authenticity.  In the earliest experimental demonstrations, entangled photon pairs were generated by spontaneous parametric down‑conversion and sent to distant users, Alice and Bob, who performed complementary measurements on time‑bin or polarization qubits to obtain correlated outcomes that form a secret key [1, 2].  Entanglement provides a direct physical resource for establishing correlations that are provably independent of any eavesdropper’s knowledge, because any attempt to intercept the photons inevitably introduces detectable errors.  The time‑bin implementation described in [1] uses an unbalanced interferometer to create early and late photon‑arrival windows; when both parties set their interferometer phases to zero, the twin photons exit the same detector port and produce perfectly correlated clicks, which can be mapped to binary values.  A later simplification removes the active switches and replaces them with passive fiber couplers, thereby preserving the essential security properties while reducing loss and system complexity; the resulting protocol no longer requires entanglement but still inherits its security intuition from the original scheme [1].\n\nPolarization‑entangled photons constitute another widely studied platform.  In the work of [2] the authors employ a source that emits pairs of photons with opposite polarizations, enabling each user to perform independent measurements in randomly chosen bases.  The randomness of quantum measurement outcomes, together with the violation of Wigner’s inequality, serves as a test of eavesdropping and as the basis for a variant of the BB84 protocol.  Because the entangled source approximates an ideal single‑photon emitter, the protocol mitigates multi‑photon emission attacks such as photon‑number‑splitting, which are particularly relevant for practical QKD systems.\n\nBeyond the specific implementations, a broader theoretical framework is required to understand how quantum resources affect cryptographic security.  The analysis in [3] shows that entanglement and uncertainty relations together constrain the capabilities of any adversary who shares quantum correlations with the legitimate parties.  By formulating the problem as a semidefinite program, the authors derive tight bounds on the success probabilities of optimal quantum strategies for state discrimination and correlation games.  These results clarify that while entanglement can enhance certain tasks, it also imposes fundamental limits on the amount of information an eavesdropper can extract without being detected.\n\nThe advent of large‑scale quantum computers introduces an additional layer of concern: many classical public‑key schemes, such as RSA and elliptic‑curve cryptography, rely on computational problems that become tractable with Shor’s algorithm.  Consequently, the field of post‑quantum cryptography (PQC) has emerged to provide algorithmic alternatives that are believed to resist quantum attacks.  The review in [4] categorizes PQC approaches into lattice‑based, code‑based, hash‑based, and multivariate‑polynomial constructions, each grounded in mathematical problems that, to date, lack known efficient quantum algorithms.  Although PQC does not exploit quantum mechanics for security, it is essential for protecting classical communication channels that coexist with quantum‑enhanced links.\n\nFinally, certain cryptographic primitives, such as bit commitment, highlight subtle limitations of quantum protocols.  The impossibility result presented in [5] demonstrates that a dishonest participant can use an Einstein‑Podolsky‑Rosen (EPR) attack to retain quantum coherence over the commitment phase and later choose the revealed value at will, thereby breaking the binding property of the protocol.  This finding underscores that not all classical cryptographic tasks can be directly upgraded to the quantum setting; careful analysis of entanglement‑based attacks is required to identify which primitives remain secure.\n\nTogether, these works establish a common vocabulary—entangled photons, time‑bin and polarization qubits, measurement bases, security proofs based on Bell‑type inequalities, semidefinite programming for optimal quantum strategies, and the distinction between quantum‑native and post‑quantum cryptographic schemes—that will be used throughout the remainder of this review to evaluate the security of entanglement‑based quantum cryptography systems."
+      },
+      {
+        "key": "theme:Entanglement in Quantum Cryptography",
+        "heading": "Entanglement in Quantum Cryptography",
+        "heading_out": "Entanglement'in Kuantum Kriptografisinde Kullanımı",
+        "text": "Entanglement has long been regarded as a cornerstone for guaranteeing security in quantum‑cryptographic protocols, yet the literature reveals a nuanced landscape in which the same physical resource can be both an asset and a source of implementation complexity.  The works surveyed in this section converge on a common problem: how to exploit the strongest quantum correlations—often embodied in entangled photon pairs—while delivering a key‑distribution system that remains feasible for real‑world fiber‑optic networks and resilient against the full spectrum of known attacks, including photon‑number‑splitting, Trojan‑horse, and general eavesdropping strategies.\n\nThe earliest contribution among the selected papers, **“Quantum cryptography with and without entanglement”** (2003) [1], explicitly juxtaposes an entanglement‑based scheme with a streamlined non‑entangled configuration.  The authors begin with time‑bin entangled photon pairs generated by spontaneous parametric down‑conversion in a periodically‑poled lithium‑niobate waveguide.  By sending a pump pulse through an unbalanced interferometer, twin photons emerge in correlated early‑ or late‑time bins, and the subsequent analysis interferometers at Alice’s and Bob’s stations are tuned so that, when the phases are set to zero, the photons exit the same port and produce perfectly synchronized detector clicks.  This entangled arrangement provides an intuitive illustration of quantum correlations but demands active optical switches and careful phase stabilization.  To address practical constraints, the paper proposes a series of simplifications: passive fiber couplers replace the active switches, loss is reduced, and the final architecture discards the entangled source altogether while preserving the essential time‑basis correlations that underpin security.  Experimental data collected over standard telecom fibers demonstrate that the correlation pattern—early‑early, late‑late, or central‑peak coincidences—remains intact after each simplification, confirming that the non‑entangled version inherits the security guarantees of its predecessor without the overhead of maintaining entanglement.\n\nThe theoretical perspective offered by **“Cryptography in a Quantum World”** (2008) [3] complements the experimental narrative by exploring the limits of entanglement‑assisted protocols through semidefinite programming (SDP).  The authors examine a broad class of non‑communicating parties that may share arbitrary entangled states and address the question of whether such resources can improve the success probabilities of quantum games that underlie cryptographic security proofs.  By constructing correlation matrices (denoted \\(A\\) and \\(W\\)) and solving the associated primal–dual SDP pair, the study shows that optimal strategies often coincide with those achievable by maximally entangled states, particularly for XOR‑type games that model many QKD security analyses.  Numerical simulations in MATLAB confirm that collective measurements do not surpass the performance of individual optimal measurements for these games, reinforcing the intuition that entanglement supplies the maximal advantage already captured by the standard BB84‑type security proofs.  Although the paper does not present a new experimental protocol, its analytic results provide a rigorous foundation for interpreting the security claims of entanglement‑based systems such as the one described in [1].\n\nThe pedagogical reviews **“Quantum Cryptography”** (2006) [6], **“Quantum Cryptography: from Theory to Practice”** (2007) [7], and **“Quantum Cryptography”** (2008) [8] collectively map the evolution of entanglement from a purely conceptual resource to a practical engineering challenge.  The 2006 article [6] outlines the fundamental principles—no‑cloning, measurement disturbance, and entanglement—and emphasizes that any protocol relying on entangled states must contend with decoherence and detector inefficiencies.  The 2007 survey [7] expands this view by cataloguing recent experimental advances, including time‑bin and polarization entanglement over metropolitan‑scale fiber links, and by highlighting the trade‑offs between source brightness, channel loss, and the need for active stabilization.  The 2008 review [8] reiterates these points but does not add new data; its inclusion underscores the consensus that, despite impressive laboratory demonstrations, the transition from entangled proof‑of‑principle setups to robust commercial QKD systems remains non‑trivial.\n\nA contrasting stance appears in **“Entanglement versus disentanglement: Quantum Cryptography”** (2000) [9], where the authors argue that entanglement constitutes a superior ingredient for alternative cryptographic constructions compared with schemes that rely solely on single‑photon preparations.  Their analysis proposes a protocol in which security is directly linked to the violation of Bell‑type inequalities, thereby guaranteeing that any eavesdropping attempt necessarily reduces the observed entanglement and can be detected.  While the paper does not provide experimental validation, it establishes a clear theoretical motivation for retaining entanglement as a security lever, a viewpoint that resonates with the SDP‑based optimality results of [3] and with the experimental emphasis on preserving correlation patterns in [1].\n\nFinally, the most recent theoretical contribution, **“Lectures on entanglement in quantum field theory”** (2022) [10], situates entanglement within the broader framework of quantum field theory, suggesting that the non‑local correlations exploited in QKD may be understood as manifestations of deeper field‑theoretic structures.  Although the lectures do not propose a specific cryptographic protocol, they raise the prospect that future security analyses could leverage field‑theoretic entanglement entropy as a quantitative resource, potentially leading to new criteria for assessing the robustness of entanglement‑based QKD against sophisticated attacks.\n\nTaken together, these works delineate a coherent research trajectory: initial demonstrations that entanglement can be replaced by carefully engineered non‑entangled time‑bin schemes without sacrificing security [1]; rigorous proofs that the maximal security advantage of entanglement is already captured by optimal SDP strategies [3]; comprehensive surveys that document the practical hurdles of maintaining entanglement in deployed networks [6–8]; a theoretical argument for preserving entanglement as a direct Bell‑test security monitor [9]; and a forward‑looking field‑theoretic perspective that may redefine the resource theory of entanglement for cryptography [10].  The convergence of experimental simplification and theoretical optimality highlights both the promise and the current limitations of entanglement‑based quantum cryptography, setting the stage for the subsequent sections on post‑quantum and quantum‑resistant approaches."
+      },
+      {
+        "key": "theme:Post‑Quantum and Quantum‑Resistant Cryptography",
+        "heading": "Post‑Quantum and Quantum‑Resistant Cryptography",
+        "heading_out": "Post‑Quantum ve Kuantum‑Dirençli Kriptografi",
+        "text": "The rapid emergence of large‑scale quantum processors has exposed a fundamental weakness in today’s public‑key infrastructure: algorithms such as RSA and elliptic‑curve cryptography rely on mathematical problems that become efficiently solvable when a quantum computer can execute Shor’s algorithm.  This shared vulnerability frames the problem addressed by the post‑quantum literature surveyed in this section.  \n\nThe most comprehensive overview of the threat and the corresponding defensive landscape is presented in **Post‑Quantum Cryptography: Securing Digital Communication in the Quantum Era** (2024) [4].  The authors begin by explicating how qubit superposition and entanglement enable the exponential speedups that underlie Shor’s algorithm, and they then categorize the principal families of quantum‑resistant schemes—lattice‑based, code‑based, hash‑based, and multivariate‑polynomial cryptography.  Their survey is purely conceptual; no empirical data or implementation benchmarks are reported, and the evaluation consists of a qualitative comparison against the baseline security of RSA and ECC under a theoretical quantum adversary.  \n\nBuilding on this classification, **Quantum‑Resistant Cryptography** (2021) [11] focuses on the imminent standardization effort led by NIST.  The report explains that the forthcoming PQC standard will select a handful of algorithms from the families identified by [4] and emphasizes the urgency for security practitioners to become familiar with these candidates before the official announcement.  While the paper does not introduce new algorithms, it bridges the gap between high‑level theoretical families and the concrete selection process that will shape industry adoption.  \n\nA more formal treatment of the security landscape appears in **Quantum Security of Cryptographic Primitives** (2017) [12].  The authors propose a systematic classification of quantum‑security scenarios into four distinct domains, each defined by the capabilities of the adversary (e.g., access to quantum hardware for encryption, decryption, or both).  For each domain they recap the principal tools and results, thereby providing a taxonomy that can be used to map specific PQC schemes—such as those surveyed in [4]—to the appropriate security model.  This work does not present experimental data but contributes a rigorous conceptual framework that clarifies which primitives remain secure under different quantum assumptions.  \n\nThe implications of these cryptographic advances for networked infrastructures are examined in **Quantum‑Resistant Networks Using Post‑Quantum Cryptography** (2025) [13].  The authors argue that contemporary quantum‑network architectures assume classical channels are already protected, an assumption that fails once quantum computers can break conventional public‑key methods.  Their analysis extends the discussion of PQC from isolated protocols to end‑to‑end network design, highlighting the need to integrate lattice‑ or code‑based key exchange into both quantum and classical layers of communication.  No empirical deployment is described; the contribution consists of a threat model and design recommendations that synthesize the algorithmic families from [4] with realistic network constraints.  \n\nA pedagogical perspective on the same topic is offered by **The Impact of Quantum Computing on Present Cryptography** (2018) [14].  This paper introduces readers to both quantum key distribution (e.g., BB84) and mathematical‑based post‑quantum solutions, reiterating the families identified in [4] and providing brief descriptions of each.  Although the work does not present original research, it serves as a bridge between quantum‑communication methods that rely on entanglement and the purely classical PQC schemes that aim to protect classical channels against quantum attacks.  \n\nFinally, the **Strategic Roadmap for Quantum‑Resistant Security: A Framework for Preparing Industries for the Quantum Threat** (2024) [15] translates the technical findings of the preceding studies into an actionable plan for industry.  The authors introduce the STL‑QCRYPTO framework, which prescribes industry‑specific methodologies for selecting, testing, and deploying quantum‑safe cryptographic primitives.  By referencing the algorithm families catalogued in [4] and the security domains defined in [12], the roadmap provides concrete steps for organizations to transition from RSA/ECC to PQC while maintaining compliance with upcoming NIST standards highlighted in [11].  \n\nCollectively, these works delineate a coherent research trajectory: they first identify the fundamental breakage of classical public‑key schemes by quantum algorithms, then enumerate and classify alternative primitives, map those primitives to rigorous security models, extend the discussion to network‑level integration, and finally propose strategic pathways for real‑world adoption.  The main gaps that emerge from the literature are the absence of large‑scale empirical performance evaluations of PQC algorithms in realistic network environments and the need for standardized transition guidelines that reconcile the theoretical security domains with practical deployment constraints."
+      },
+      {
+        "key": "theme:Foundations and Limits of Quantum Secure primitives",
+        "heading": "Foundations and Limits of Quantum Secure primitives",
+        "heading_out": "Kuantum Güvenli Primitiflerin Temelleri ve Sınırları",
+        "text": "The theoretical foundations of quantum‑secure primitives rest on a set of information‑theoretic constraints that delineate what can and cannot be achieved with quantum resources. A central line of inquiry investigates whether classic cryptographic building blocks—commitment, secret sharing, data hiding, and encryption—retain their security guarantees when adversaries are allowed to exploit entanglement and superposition.\n\nA seminal obstacle emerged from the study of quantum bit commitment. Early optimism that quantum mechanics might enable perfectly binding and concealing commitments was shattered by a series of impossibility proofs. In “Is Quantum Bit Commitment Really Possible?” the authors demonstrated that an adversarial committer can adopt an Einstein‑Podolsky‑Rosen (EPR) strategy, preparing entangled states and postponing measurement until the opening phase, thereby breaking the binding property of all examined protocols [5]. This argument was reinforced by the later work “Unconditionally secure quantum bit commitment is impossible,” which extended the impossibility result to any conceivable quantum bit‑commitment scheme, showing that no protocol can simultaneously satisfy both security properties under the laws of quantum mechanics [17]. Together, these findings establish a fundamental limit: commitment cannot be realized with unconditional security in a purely quantum setting.\n\nSecret sharing, by contrast, benefits from the no‑cloning theorem, which imposes a clear combinatorial bound on threshold schemes. The paper “How to share a quantum secret” derived the necessary condition n < 2k for a ((k,n)) quantum secret‑sharing protocol and supplied an efficient construction that meets this bound, thereby showing that quantum information can be distributed securely as long as the cloning restriction is respected [16]. This result illustrates how a single information‑theoretic principle can both enable and constrain a primitive.\n\nThe notion of hiding information also undergoes a quantum reinterpretation. “Quantum Data Hiding” explored the possibility of encoding classical bits into entangled Bell states such that the hidden data cannot be extracted by parties limited to local operations and classical communication (LOCC). The authors provided explicit upper and lower bounds on the secrecy of the scheme and proved that multiple bits can be hidden bitwise, revealing both the power and the quantitative limits of data‑hiding constructions [18].\n\nPrivacy amplification, a crucial step in turning partially secret correlations into a uniformly random key, was examined under quantum adversaries in “Universally composable privacy amplification against quantum adversaries.” By employing two‑universal hashing, the authors proved that the resulting key remains secure in a universally composable sense, and they derived an asymptotically optimal lower bound on the extractable key length as a function of the adversary’s quantum knowledge [19]. This work bridges the gap between classical randomness extraction techniques and the demands of quantum‑level security.\n\nEncryption of quantum data presents another frontier where information‑theoretic limits become explicit. “Randomizing quantum states: Constructions and applications” showed that perfect randomization of a d‑dimensional quantum state requires 2 log d bits of shared secret key, but near‑perfect security can be achieved with roughly d log d unitary operators, effectively halving the key length needed for practical implementations [21]. Complementarily, “Optimal Encryption of Quantum Bits” characterized the complete set of protocols that securely encrypt n qubits using classical randomness, proving that 2n random bits are both necessary and sufficient for perfect secrecy [22]. These complementary analyses define the exact resource trade‑offs for private quantum channels.\n\nFinally, the broader philosophical perspective offered by “Characterizing quantum theory in terms of information‑theoretic constraints” ties together the impossibility of superluminal signaling, the impossibility of broadcasting unknown states, and the impossibility of unconditionally secure bit commitment as a trio of principles that uniquely specify quantum mechanics [23]. By linking these constraints to the limits of cryptographic primitives, the work provides a unifying framework that explains why certain tasks—such as secure bit commitment—are prohibited, while others—like secret sharing and encryption—are permissible under well‑defined resource bounds.\n\nCollectively, these contributions map the landscape of what quantum cryptography can achieve: they delineate inviolable impossibility results, identify precise quantitative thresholds for feasible primitives, and highlight how entanglement both empowers and restricts security. The gaps that remain include developing composable security definitions for more complex multi‑party protocols and tightening the bounds on key‑size versus security trade‑offs for near‑perfect randomization, challenges that future work must address."
+      },
+      {
+        "key": "theme:Entanglement‑Based QKD Experiments",
+        "heading": "Entanglement‑Based QKD Experiments",
+        "heading_out": "Entanglement‑Tabanlı QKD Deneyleri",
+        "text": "Entanglement‑Based QKD Experiments  \n\nThe experimental literature on entanglement‑based quantum key distribution (QKD) converges on the practical problem of turning the theoretical security guarantees of entangled photons into usable cryptographic keys over realistic channels. Across the selected papers, researchers share the objective of demonstrating that polarization‑ or energy‑time‑entangled photon pairs can support key generation at rates and error levels compatible with real‑world communication, while simultaneously providing a stringent test of security through Bell‑type inequalities or entanglement purification.\n\nEarly experimental work focused on establishing a proof‑of‑principle for using entangled photons as a substitute for ideal single‑photon sources. **“Quantum Cryptography with Entangled Photons”** (1999) [2] presented a system in which two independent users separated by 360 m exchanged polarization‑entangled pairs. By employing Wigner’s inequality to certify the presence of entanglement, the authors generated raw keys at 400–800 bits s⁻¹ with a bit‑error rate (BER) of roughly 3 %. This study highlighted the feasibility of scalable, distance‑independent key exchange and introduced a variant of the BB84 protocol that leverages entanglement rather than prepared single photons.\n\nSubsequent investigations extended the range and robustness of entanglement‑based QKD. **“Long distance entanglement based quantum key distribution”** (2000) [30] adopted an energy‑time entangled Franson interferometer optimized for transmission over 8.5 km of fiber. The experiment produced a sifted key of 0.4 Mbits at a raw rate of 134 Hz with an 8.6 % error rate, demonstrating that time‑bin entanglement can sustain key distribution across metropolitan distances. In parallel, **“Practical Quantum Key Distribution with Polarization‑Entangled Photons”** (2004) [28] moved the technology into a field deployment: two embedded hardware devices exchanged keys in real time over 1.45 km of optical fiber installed in the Vienna sewage system. Although the excerpt does not give quantitative rates, the work proved that entangled‑photon QKD can operate under non‑laboratory conditions and integrate with existing infrastructure.\n\nA notable shift toward higher‑dimensional quantum systems appears in **“Experimental Quantum Cryptography with Qutrits”** (2005) [29]. By encoding information in the orbital angular momentum of photons, the authors generated two identical keys using entangled qutrits rather than qubits. The reported qutrit error rate of about 10 % indicates that moving to three‑level systems introduces additional noise, yet the experiment confirms that multidimensional entanglement can be harnessed for key distribution, opening a path toward higher information density per photon.\n\nSecurity‑focused experiments complement these engineering advances. **“Experimental quantum key distribution certified by Bell’s theorem”** (2021) [27] realized a complete Bell‑inequality‑based protocol that is intrinsically immune to detector‑side‑channel attacks. Building on Ekert’s original proposal, the authors performed a full key‑generation cycle in which violation of Bell’s theorem directly bounds an eavesdropper’s knowledge, thereby achieving information‑theoretic security without reliance on additional assumptions. Although specific rates are not disclosed in the excerpt, the work establishes a benchmark for device‑independent QKD.\n\nTheoretical security proofs underpinning the experimental efforts are provided by several foundational papers. **“Simple Proof of Security of the BB84 Quantum Key Distribution Protocol”** (2000) [24] linked an entanglement‑purification protocol to BB84, showing that security of the former implies security of the latter. This result justifies the experimental practice of testing entanglement quality (e.g., via Wigner’s inequality) as a proxy for BB84 security. **“Security of Quantum Key Distribution”** (2005) [25] introduced a de Finetti‑style representation theorem for finite symmetric states, enabling security arguments that apply to arbitrary QKD protocols, including the diverse entanglement‑based schemes described above. Finally, **“Unconditional Security Of Quantum Key Distribution Over Arbitrarily Long Distances”** (1998) [26] demonstrated that, assuming fault‑tolerant quantum computers, entanglement‑based QKD can remain unconditionally secure even in the presence of realistic source, device, and channel noise, thereby providing a theoretical foundation for the long‑distance experiments of [30] and the field deployment of [28].\n\nCollectively, these works map a trajectory from early laboratory demonstrations of polarization entanglement to long‑distance, field‑tested, and higher‑dimensional implementations, all anchored by rigorous security analyses. The remaining gaps, as inferred from the reported data, include the need for higher key‑generation rates at low error probabilities over metropolitan and beyond‑metro distances, and the integration of device‑independent security proofs with practical hardware platforms. Addressing these challenges constitutes a central direction for future entanglement‑based QKD research."
+      },
+      {
+        "key": "comparison",
+        "heading": "Comparison and Discussion",
+        "heading_out": "Karşılaştırma ve Tartışma",
+        "text": "**Comparison and Discussion**\n\n| Work | Year | Key idea | Setting or scale | Main result |\n|------|------|----------|------------------|-------------|\n| Quantum cryptography with and without entanglement [1] | 2003 | Time‑bin entangled photons, passive couplers | Telecom fiber, lab‑scale | Correlated clicks preserved after simplification |\n| Quantum Cryptography with Entangled Photons [2] | 1999 | Polarization entanglement, Wigner‑inequality test | 360 m free‑space link | 400‑800 bit/s key, ~3 % QBER |\n| Cryptography in a Quantum World [3] | 2008 | SDP optimisation of entanglement‑assisted strategies | Theoretical analysis, up to 148 km experiments | Tight SDP bounds match maximal entanglement limits |\n| Post‑Quantum Cryptography: Securing Digital Communication [4] | 2024 | Survey of lattice, code, hash, multivariate schemes | Conceptual, no experimental data | PQC resists Shor’s algorithm attacks |\n| Is Quantum Bit Commitment Really Possible? [5] | 1996 | EPR‑type cheating strategy on commitment | Purely theoretical | All known quantum bit‑commitment protocols insecure |\n| Simple Proof of Security of BB84 [24] | 2000 | Entanglement‑purification reduction to BB84 | Theoretical, applicable to any distance | BB84 security follows from entanglement‑based proof |\n| Unconditional Security of QKD over Arbitrarily Long Distances [26] | 1998 | Fault‑tolerant QKD with noisy channels | Theoretical, arbitrary distance | Unconditional security achievable with quantum error correction |\n| Quantum‑Resistant Networks Using Post‑Quantum Cryptography [13] | 2025 | Integration of PQC into quantum‑network architectures | Network‑level design study | Classical channels must adopt PQC for overall security |\n\nThe table highlights how earlier experimental works ([1], [2]) prioritize physical implementation simplicity and modest key rates, whereas later theoretical contributions ([3], [24], [26]) focus on proving unconditional security and optimality of entanglement‑assisted strategies. Post‑quantum surveys ([4], [13]) shift the emphasis from quantum‑only primitives to hybrid architectures that must protect classical control channels against future quantum adversaries. Meanwhile, foundational impossibility results such as the bit‑commitment analysis ([5]) expose intrinsic limits of certain quantum protocols, reminding designers that not every cryptographic task benefits from entanglement.\n\nOverall, a trade‑off emerges between implementation complexity and security guarantees. Entanglement‑based QKD can achieve information‑theoretic security but often requires delicate interferometric stability and low‑loss channels, limiting scalability. Simpler prepare‑and‑measure schemes sacrifice some theoretical elegance yet attain higher raw key rates and easier deployment. Post‑quantum classical schemes offer robustness against large‑scale quantum computers without demanding quantum hardware, but they lack the intrinsic eavesdropper detection that entanglement provides. Consequently, current research trends toward integrating both worlds: using entanglement where feasible for ultimate security, while relying on quantum‑resistant algorithms to safeguard classical infrastructure and bridge practical gaps."
+      },
+      {
+        "key": "open",
+        "heading": "Open Problems",
+        "heading_out": "Açık Problemler",
+        "text": "Open Problems  \n\nThe existing literature highlights several concrete research directions that remain insufficiently explored. First, the simplification of entanglement‑based measurement apparatus described in **“Quantum cryptography with and without entanglement”** [1] demonstrates that replacing active switches with passive couplers can preserve the essential timing correlations. However, the work does not quantify how the reduced hardware complexity influences the overall secret‑key rate, the tolerance to channel loss, or the robustness against side‑channel attacks. Consequently, a systematic analysis of the trade‑off between implementation simplicity and security parameters is needed, together with experimental validation on long‑distance fiber links.  \n\nSecond, the early experimental results reported in **“Quantum Cryptography with Entangled Photons”** [2] achieved key‑generation rates of 400–800 bits s⁻¹ with a bit‑error rate around 3 percent, yet the paper provides no discussion of scalability to higher rates or to metropolitan‑scale networks. Future work must therefore address (i) engineering of brighter entangled‑photon sources and (ii) advanced error‑correction and privacy‑amplification schemes that can sustain low error rates while supporting megabit‑per‑second key rates.  \n\nThird, the semidefinite‑programming framework presented in **“Cryptography in a Quantum World”** [3] establishes optimality for XOR‑type non‑local games and shows that collective measurements rarely improve success probabilities. Nevertheless, the study leaves open the question of whether similar optimality results hold for more general, non‑XOR Bell inequalities that underlie many entanglement‑based QKD protocols. Extending the SDP analysis to these broader classes could clarify the ultimate security limits of practical protocols and guide the design of measurement settings that are provably optimal.  \n\nFourth, the impossibility result for quantum bit commitment articulated in **“Is Quantum Bit Commitment Really Possible?”** [5] underscores a fundamental limitation of two‑party primitives built on entanglement. Yet, the paper does not explore whether additional physical assumptions—such as relativistic constraints or bounded‑quantum‑storage models—might circumvent the no‑go theorem. Investigating secure bit‑commitment schemes under these auxiliary assumptions remains an open theoretical challenge.  \n\nFifth, the overview of post‑quantum cryptography in **“Post‑Quantum Cryptography: Securing Digital Communication in the Quantum Era”** [4] emphasizes the need for algorithms that resist Shor’s algorithm, but it does not address how such algorithms can be integrated with entanglement‑based QKD in hybrid security architectures. Designing protocols that combine information‑theoretic security from entanglement with computational security from lattice‑based or code‑based schemes, and proving composable security for the combined system, constitutes a promising line of research.  \n\nFinally, across the selected works there is a conspicuous absence of systematic security analyses that incorporate realistic device imperfections, such as detector dead times, polarization drift, and finite‑size effects. Developing comprehensive security proofs that explicitly model these imperfections, and validating them experimentally, is essential for transitioning entanglement‑based cryptographic systems from laboratory demonstrations to deployed infrastructures."
+      },
+      {
+        "key": "conclusion",
+        "heading": "Conclusion",
+        "heading_out": "Sonuç",
+        "text": "The review demonstrates that entanglement remains a pivotal yet double‑edged resource for securing quantum‑cryptographic protocols. Early analyses such as **“Quantum cryptography with and without entanglement”** [1] highlighted that time‑bin entangled photons can preserve correlated detection events even when experimental simplifications are introduced, confirming the theoretical promise of entanglement‑based schemes. Subsequent experimental work, exemplified by **“Quantum Cryptography with Entangled Photons”** [2], translated this promise into practice by achieving laboratory‑scale key‑generation rates of several hundred bits per second with modest error rates, thereby establishing a concrete proof‑of‑principle for entanglement‑based QKD.\n\nAcross the thirty selected contributions, a consistent picture emerges: while entanglement enables information‑theoretic security that is unattainable with classical resources, its exploitation introduces substantial implementation challenges, including the need for high‑quality photon sources, low‑loss distribution channels, and precise synchronization. The comparative tables underscore that many works continue to operate at the lab‑scale or on limited metropolitan networks, and only a subset reports scalability analyses or performance metrics beyond the initial demonstrations.\n\nThe survey of post‑quantum and quantum‑resistant cryptography reinforces that classical public‑key infrastructures are vulnerable to Shor’s algorithm, motivating parallel research on lattice‑based, code‑based, and multivariate schemes. Nonetheless, the literature reviewed does not present a unified transition pathway from current quantum‑safe primitives to large‑scale deployment, indicating that integration of quantum‑resistant algorithms with entanglement‑based protocols remains an open engineering problem.\n\nFoundational studies on quantum‑secure primitives clarify the boundaries of what entanglement can achieve. Results on the impossibility of unconditionally secure quantum bit commitment and the combinatorial limits of secret‑sharing schemes illustrate that certain cryptographic tasks retain intrinsic constraints even in the presence of quantum resources. These theoretical limits guide the design of realistic protocols and prevent over‑optimistic expectations about the capabilities of entanglement.\n\nExperimental investigations of entanglement‑based QKD converge on the necessity of improving key‑generation rates, reducing bit‑error ratios, and extending transmission distances. The early experiments cited achieve modest performance, and the subsequent literature repeatedly calls for advances in detector efficiency, multiplexing techniques, and integration with existing telecom infrastructure. The comparative discussion confirms that while security proofs are well‑established, practical throughput and network compatibility are still evolving.\n\nIn sum, the thirty peer‑reviewed works collectively affirm that quantum entanglement provides a robust foundation for secure communication, yet its practical adoption is bounded by technical, scalability, and integration challenges. Addressing these challenges will require coordinated progress in source engineering, channel optimization, and the harmonious blending of quantum‑safe classical algorithms with entanglement‑based quantum protocols."
+      }
+    ],
+    "title": "Kuantum Dolanıklığın Kuantum Kriptografi Sistemlerindeki Güvenlik Rolü: Literatür İncelemesi】"
+  }
+}

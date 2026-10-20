@@ -870,3 +870,67 @@ def test_review_typed_seeds_and_deep_sources_never_move():
         [{"ids": ["s", "a"]}, {"ids": ["b"]}], ["s", "a", "b"], vectors[:3], ["s"], 3, reviews={"s"}
     )
     assert deep[0] == "s"
+
+
+def test_truncated_section_drops_partial_and_empty_table_rows():
+    from arxiv_rag.generation.writer import tidy_section
+
+    table = "Text before [1].\n\n| Work | Year | Result |\n|---|---|---|\n| A [1] | 1999 | Good |\n"
+    assert tidy_section(table + "| B [2] | 2003 | Partial res", truncated=True) == (table.strip(), True)
+    assert tidy_section(table + "| B [2] | 2003 | |", truncated=True) == (table.strip(), True)
+    assert tidy_section(table.strip(), truncated=True) == (table.strip(), False)
+    only_header = "Intro sentence [1].\n\n| Work | Year |\n|---|---|\n| A [1] | 19"
+    assert tidy_section(only_header, truncated=True) == ("Intro sentence [1].", True)
+
+
+def test_truncated_section_drops_partial_list_items_and_dangling_headings():
+    from arxiv_rag.generation.writer import tidy_section
+
+    assert tidy_section("First point [1].\n\n- Second point is cut", truncated=True) == ("First point [1].", True)
+    assert tidy_section("Done [2].\n\n### Next part", truncated=True) == ("Done [2].", True)
+    assert tidy_section("First point [1].\n\n- Second point is cut") == (
+        "First point [1].\n\n- Second point is cut",
+        False,
+    )
+
+
+def test_repeated_heading_at_section_start_is_dropped():
+    from arxiv_rag.generation.writer import drop_repeated_heading
+
+    names = ["Related Work: Entanglement‑Based QKD Security", "Entanglement-Based QKD Security"]
+    text = "**Entanglement‑Based QKD Security**\n\nBody text [1]."
+    assert drop_repeated_heading(text, names) == ("Body text [1].", True)
+    assert drop_repeated_heading("### Entanglement-based QKD security:\nBody [1].", names) == ("Body [1].", True)
+    caption = "**Comparison of Representative Works**\n\n| Work |"
+    assert drop_repeated_heading(caption, ["Comparison and Discussion"]) == (caption, False)
+    assert drop_repeated_heading("Entanglement-Based QKD Security protocols differ [1].", names)[1] is False
+
+
+def test_plan_retranslates_turkish_theme_names_that_keep_english_words(tmp_path, monkeypatch):
+    prompts = []
+    _bilingual_llm(monkeypatch, prompts)
+    base_chat, base_complete = llm.chat, llm.complete
+
+    def chat(prompt, model, **kw):
+        data, tokens = base_chat(prompt, model, **kw)
+        if "clusters of paper titles" in prompt:
+            data = {
+                **data,
+                "themes": [{**t, "name_local": f"Entanglement Tema {t['cluster']}"} for t in data["themes"]],
+            }
+        return data, tokens
+
+    def complete(prompt, model, max_tokens):
+        if prompt.startswith("Translate each line below"):
+            lines = prompt.split("\n\n", 1)[1].splitlines()
+            return "\n".join(f"Dolanıklık {line}" for line in lines), 5, "stop"
+        return base_complete(prompt, model, max_tokens)
+
+    monkeypatch.setattr(llm, "chat", chat)
+    monkeypatch.setattr(llm, "complete", complete)
+    conn, pipeline = _world(tmp_path)
+    view = document.build_document(
+        conn, connect(tmp_path / "c.db"), pipeline, "experts", lang="tr", n_sources=8, dry_run=True
+    )
+    assert all(t["name"].startswith("Dolanıklık Theme ") for t in view["themes"])
+    assert view["tokens"]["themes"] > 40
