@@ -31,7 +31,7 @@ ARXIV_CONTACT_EMAIL=
 İsteğe bağlı: `LLM_CARD_MODEL`, `LLM_WRITE_MODEL`, `LLM_TPM`, `FULLTEXT_POLICY` (`all`/`cc`), `S2_API_KEY`,
 `QUERY_TRANSLATION` (`off`/`replace`/`fuse`; Türkçe sorguları aramadan önce İngilizceye çevirir, önerilen `replace`),
 `GEMINI_API_KEY` (Gemini katmanı; yoksa katman atlanır), `GEMINI_MODEL`, `GEMINI_AUTH` (`bearer`/`header`), `GEMINI_RPM`.
-Gemini anahtarını ve modelini denemek için: `python -m scripts.generation.check_gemini`.
+Gemini'nin canlıdaki durumu `/api/health` cevabındaki `gemini` alanında görünür.
 
 Yerel veri (30 binlik örnek, vektörler ve modeller) `notebooks/08_local_bundle.py` çıktısındaki pakettir:
 
@@ -56,19 +56,18 @@ Komut satırından belge üretimi (tam korpus gerekir):
 python -m scripts.generation.generate --topic "Mixture of experts for large language models" --type survey --dry-run
 ```
 
-## Sunucuda çalıştırma (Docker)
-
-Gerekenler: Docker ve Docker Compose, en az 16 GB bellek, 80 ve 443 portları açık bir sunucu.
+## Yayın (Hugging Face Space)
 
 ```
-cp deploy/env.example .env
-docker compose build
-docker compose run --rm app python -m scripts.deploy.fetch_data
-docker compose up -d
+cd frontend
+npm run build
+cd ..
+python -m scripts.deploy.build_space --push <kullanıcı>/<space>
 ```
 
-`.env` içinde `SITE_ADDRESS` sitenin adresidir; Caddy bu adres için HTTPS sertifikasını kendisi alır. `fetch_data`
-veritabanını, vektörleri ve modelleri `HF_DATA_REPO` veri deposundan indirip boyutlarını doğrular.
+Space açılışta veritabanını, vektörleri ve modelleri veri deposundan `scripts.deploy.fetch_data` ile indirir.
+Gemini katmanı için Space ayarlarına `GEMINI_API_KEY` secret'ı eklenir; durumu `/api/health` cevabındaki `gemini`
+alanında görünür.
 
 ## Testler
 

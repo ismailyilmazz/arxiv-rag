@@ -25,6 +25,9 @@ def retranslate(report: dict, model: str) -> tuple[str, dict]:
     texts, rows, tokens, glossary = writer.translate_sections(
         sections, draft["label"], lang, model, names, titles=draft.get("titles") or []
     )
+    for s in sections:
+        if s["key"].startswith("theme:"):
+            s["heading_out"] = prefix + names[s["key"][6:]]
     body = "\n\n".join(f"## {s['heading_out']}\n\n{texts[s['key']]}" for s in sections)
     summary = {
         "tokens": tokens + heading_tokens,

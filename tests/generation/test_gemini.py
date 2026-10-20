@@ -6,7 +6,6 @@ import pytest
 
 from arxiv_rag import config
 from arxiv_rag.generation import gemini
-from scripts.generation import check_gemini
 
 
 class Reply:
@@ -126,19 +125,6 @@ def test_model_pick_prefers_the_configured_then_the_newest_plain_flash():
     assert gemini.pick_model(["gemini-pro"], "x") == ""
 
 
-def test_check_script_reports_the_working_auth(monkeypatch, capsys):
-    def list_models(auth):
-        if auth == "bearer":
-            raise gemini.GeminiUnavailable("HTTP 401: ACCESS_TOKEN_TYPE_UNSUPPORTED")
-        return ["gemini-3.5-flash"]
-
-    monkeypatch.setattr(gemini, "list_models", list_models)
-    monkeypatch.setattr(gemini, "complete", lambda prompt, max_tokens, model, auth: ("OK", 7, "stop"))
-    assert check_gemini.main() == 0
-    out = capsys.readouterr().out
-    assert "GEMINI_AUTH=header" in out and "GEMINI_MODEL=gemini-3.5-flash" in out and "AQ.test" not in out
-
-
 MODELS = {"data": [{"id": "models/gemini-3.5-flash"}, {"id": "models/gemini-3.5-flash-lite"}]}
 
 
@@ -172,3 +158,21 @@ def test_failed_probe_is_retried_after_a_while(monkeypatch):
     assert gemini.status()["ok"] is False
     clock[0] += gemini.RECHECK_SECONDS + 1
     assert gemini.status()["ok"] is True
+
+
+def test_a_timeout_trips_the_breaker_so_repairs_skip_gemini(monkeypatch):
+    from arxiv_rag.generation import writer
+
+    seen = fake_urlopen(monkeypatch, TimeoutError("read timed out"))
+    with pytest.raises(gemini.GeminiUnavailable):
+        gemini.complete("x", model="m", auth="bearer")
+    info = gemini.status()
+    assert info["ok"] is False and info["errors"]["runtime"] == "TimeoutError" and len(seen) == 1
+    assert writer._repair_engines() == ("groq", "groq")
+
+
+def test_rate_limit_after_retries_also_trips_the_breaker(monkeypatch):
+    fake_urlopen(monkeypatch, http_error(429), http_error(429), http_error(429))
+    with pytest.raises(gemini.GeminiUnavailable):
+        gemini.complete("x", model="m", auth="bearer")
+    assert gemini.status()["ok"] is False

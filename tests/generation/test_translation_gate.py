@@ -514,3 +514,37 @@ def test_correct_translation_of_a_bold_term_that_equals_a_short_title_is_accepte
     monkeypatch.setattr(llm, "complete", Script(tr))
     text, _, _, attempts = writer.translate_section(en, "survey", "tr", "m", titles=["Quantum entanglement"])
     assert text == tr and attempts == 1
+
+
+DOLGU = {"Entanglement‑Based Quantum Key Distribution": "Dolgu‑Temelli Kuantum Anahtar Dağıtımı"}
+GLOSSARY = {"entanglement-based": "dolanıklık temelli", "key distribution": "anahtar dağıtımı", **DOLGU}
+
+
+def test_theme_name_that_contradicts_the_glossary_is_translated_again(monkeypatch):
+    fake = Script("Dolanıklık Temelli Kuantum Anahtar Dağıtımı")
+    monkeypatch.setattr(llm, "complete", fake)
+    names, glossary = dict(DOLGU), dict(GLOSSARY)
+    tokens, fixed = writer.align_names(names, glossary, "tr", "m")
+    assert fixed == 1 and tokens == 100
+    assert names["Entanglement‑Based Quantum Key Distribution"] == "Dolanıklık Temelli Kuantum Anahtar Dağıtımı"
+    assert glossary["Entanglement‑Based Quantum Key Distribution"] == "Dolanıklık Temelli Kuantum Anahtar Dağıtımı"
+    assert "entanglement-based = dolanıklık temelli" in fake.prompts[0]
+
+
+def test_consistent_names_are_left_alone_and_a_bad_retry_is_rejected(monkeypatch):
+    fake = Script("Dolgu Temelli Dağıtım")
+    monkeypatch.setattr(llm, "complete", fake)
+    good = {"Entanglement‑Based QKD": "Dolanıklık Temelli QKD"}
+    assert writer.align_names(good, dict(GLOSSARY), "tr", "m") == (0, 0) and fake.prompts == []
+    names = dict(DOLGU)
+    assert writer.align_names(names, dict(GLOSSARY), "tr", "m") == (100, 0) and names == DOLGU
+
+
+def test_translate_sections_fixes_theme_names_in_place(monkeypatch):
+    monkeypatch.setattr(llm, "chat", Chat({"terms": [{"en": "entanglement", "target": "dolanıklık"}]}))
+    monkeypatch.setattr(llm, "complete", Script("Dolanıklık Yöntemleri", TR, TR))
+    names = {"Entanglement Methods": "Dolgu Yöntemleri"}
+    sections = [{**SECTIONS[0]}, {"key": "theme:Entanglement Methods", "heading": "x", "heading_out": "y", "text": EN}]
+    _, rows, _, glossary = writer.translate_sections(sections, "survey", "tr", "m", names)
+    assert names == {"Entanglement Methods": "Dolanıklık Yöntemleri"} and rows[0]["names_fixed"] == 1
+    assert glossary["Entanglement Methods"] == "Dolanıklık Yöntemleri"

@@ -131,7 +131,6 @@ must use for each. Use the established {language} term of the field. Leave out a
 and paper titles.
 Return JSON: {{"terms": [{{"en": "...", "target": "..."}}]}}"""
 
-MAX_ENGLISH_SHARE = 0.0
 META_NOTE = re.compile(
     r"\s*\((?=[^()]*(?:çevir|translat))(?=[^()]*(?:eksik|tamamlan|yapılamad|incomplete|missing|could not))[^()]{5,300}\)"
 )
@@ -517,21 +516,65 @@ def build_glossary(texts: list[str], names: dict, label: str, lang: str, model: 
     return glossary, tokens
 
 
+def _stem(text: str) -> str:
+    words = re.findall(r"[^\W\d_]+", text.lower())
+    return words[0][:5] if words else ""
+
+
+def misaligned(english: str, local: str, glossary: dict, skip=()) -> bool:
+    name, lowered = language.normalize(english), local.lower()
+    for key, target in glossary.items():
+        term = language.normalize(key)
+        if key in skip or term == name or len(term) < 4 or same_text(key, target):
+            continue
+        stem = _stem(target)
+        if re.search(rf"(?<![a-z]){re.escape(term)}(?![a-z])", name) and len(stem) >= 4 and stem not in lowered:
+            return True
+    return False
+
+
+def align_names(names: dict, glossary: dict, lang: str, model: str) -> tuple[int, int]:
+    tokens, fixed = 0, 0
+    if lang == "en":
+        return tokens, fixed
+    terms = {k: v for k, v in glossary.items() if k not in names}
+    for english, local in list(names.items()):
+        if not misaligned(english, local, glossary, names):
+            continue
+        prompt = HEADING_RETRY_PROMPT.format(language=LANGUAGES[lang], line=english) + glossary_rule(terms)
+        text, extra, _ = llm.complete(prompt, model=model, max_tokens=400)
+        tokens += extra
+        single = _heading_lines(text)
+        if (
+            len(single) == 1
+            and plausible_heading(single[0], english)
+            and not misaligned(english, single[0], glossary, names)
+        ):
+            names[english] = single[0]
+            if english in glossary:
+                glossary[english] = single[0]
+            fixed += 1
+    return tokens, fixed
+
+
 def translate_sections(
     sections: list[dict], label: str, lang: str, model: str, names: dict, progress=None, titles=()
 ) -> tuple[dict, list[dict], int, dict]:
     progress = progress or (lambda stage, done, total: None)
     glossary, used = build_glossary([s["text"] for s in sections], names, label, lang, model)
+    extra, fixed = align_names(names, glossary, lang, model)
     report = [
         {
             "section": "translate:glossary",
             "source": None,
-            "tokens": used,
+            "tokens": used + extra,
             "truncated": False,
             "tidied": False,
             "terms": len(glossary),
+            "names_fixed": fixed,
         }
     ]
+    used += extra
     texts, stats = {}, new_repair_stats()
     progress("translate", 0, len(sections))
     for done, item in enumerate(sections, start=1):
@@ -922,6 +965,9 @@ def write_document(
         )
         report += rows
         used += tokens
+        for p, section in zip(plan, draft["sections"]):
+            if p["theme"]:
+                p["heading_out"] = section["heading_out"] = spec["theme_prefix"][lang] + local[p["theme"]["name"]]
     title, tokens, _ = _call(
         TITLE_PROMPT.format(language=LANGUAGES[lang], label=label, written=summary_of(written)), model, 300
     )

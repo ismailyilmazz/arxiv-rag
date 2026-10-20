@@ -35,6 +35,13 @@ def reset_usage() -> None:
         _USAGE.update(calls=0, tokens=0, errors=0, seconds=0.0)
 
 
+def _trip(reason: str) -> None:
+    with _STATE_LOCK:
+        info = dict(_STATE["info"] or {"enabled": True})
+        info.update(ok=False, errors={**(info.get("errors") or {}), "runtime": reason[:120]})
+        _STATE.update(info=info, at=time.monotonic())
+
+
 def forget() -> None:
     with _STATE_LOCK:
         _STATE.update(info=None, at=0.0)
@@ -144,10 +151,13 @@ def _request(path: str, payload=None, auth: str = "", retries: int = 3, timeout:
                 continue
             with _LOCK:
                 _USAGE["errors"] += 1
+            if e.code in RETRY_CODES:
+                _trip(f"HTTP {e.code}")
             raise GeminiUnavailable(f"HTTP {e.code}: {_body(e)}") from e
         except (urllib.error.URLError, TimeoutError) as e:
             with _LOCK:
                 _USAGE["errors"] += 1
+            _trip(type(e).__name__)
             raise GeminiUnavailable(f"{type(e).__name__}: {e}") from e
     raise GeminiUnavailable("Gemini cevap vermedi.")
 
