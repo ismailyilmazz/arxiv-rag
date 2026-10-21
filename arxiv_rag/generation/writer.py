@@ -171,7 +171,17 @@ def drop_repeated_heading(text: str, names) -> tuple[str, bool]:
     return "\n".join(lines[1:]).lstrip(), True
 
 
+WIDE_CITATION = re.compile(
+    r"[\u3010\uff3b]\s*(\d+(?:\s*[,\uff0c\u3001]\s*\d+)*)\s*(?:\u2020[^\u3011\uff3d]*)?[\u3011\uff3d]"
+)
+
+
+def normalize_citations(text: str) -> str:
+    return WIDE_CITATION.sub(lambda m: "[" + re.sub(r"\s*[,\uff0c\u3001]\s*", ", ", m.group(1)) + "]", text)
+
+
 def tidy_section(text: str, truncated: bool = False) -> tuple[str, bool]:
+    text = normalize_citations(text)
     lines, seen, cut = text.rstrip().splitlines(), set(), None
     for i in range(1, len(lines)):
         if _SEPARATOR.match(lines[i]) and "|" in lines[i - 1]:

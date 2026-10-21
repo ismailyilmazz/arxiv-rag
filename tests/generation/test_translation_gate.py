@@ -576,3 +576,13 @@ def test_units_missing_from_the_batch_reply_fall_back_to_groq(monkeypatch):
     text, _, repaired, _ = writer.repair_paragraphs(f"{EN}\n\n{EN}", "tr", "m", stats=stats)
     assert text == f"{TR}\n\n{TR}" and repaired == 2
     assert (stats["gemini_ok"], stats["groq_tried"], stats["groq_ok"]) == (1, 1, 1)
+
+
+def test_wide_bracket_citations_become_standard_citations():
+    text = "Hallucinations erode trust【1】 and harm users【2】【4】; see also【3, 5】 and【6†source】 and［7］."
+    assert writer.normalize_citations(text) == (
+        "Hallucinations erode trust[1] and harm users[2][4]; see also[3, 5] and[6] and[7]."
+    )
+    out, _ = writer.tidy_section("Background text cites【1】 and【2，3】 properly.")
+    assert out == "Background text cites[1] and[2, 3] properly."
+    assert writer.normalize_citations("Plain [1] text 【note】 stays.") == "Plain [1] text 【note】 stays."
