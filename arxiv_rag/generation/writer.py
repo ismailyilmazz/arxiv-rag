@@ -369,6 +369,54 @@ def new_repair_stats() -> dict:
     return {"units": 0, "gemini_tried": 0, "gemini_ok": 0, "groq_tried": 0, "groq_ok": 0, "kept": 0}
 
 
+COMPLETE_PROMPT = """{prompt}
+
+The section below was cut off before it was finished. Continue it from exactly where it stops, starting with the next
+sentence (or the next table row if it stops inside a table). Write only the missing remainder: do not repeat, rewrite
+or summarize what is already written, and do not add a heading. Follow every rule of the task above, including the
+citation format [n] with the numbers of the given sources only.
+
+Section so far:
+{text}"""
+CONTINUATION_MIN_WORDS = 15
+CONTINUATION_MAX_WORDS = 1500
+
+
+def _shingles(text: str, k: int = 8) -> set:
+    words = re.findall(r"\w+", text.lower())
+    return {tuple(words[i : i + k]) for i in range(len(words) - k + 1)}
+
+
+def accept_continuation(extra: str, base: str, n_sources: int) -> bool:
+    words = len(extra.split())
+    if not CONTINUATION_MIN_WORDS <= words <= max(CONTINUATION_MAX_WORDS, len(base.split())):
+        return False
+    if extra.lstrip().startswith("#") or not _citation_numbers(extra) <= set(range(1, n_sources + 1)):
+        return False
+    new = _shingles(extra)
+    return not new or len(new & _shingles(base)) / len(new) <= 0.3
+
+
+def complete_section(prompt: str, text: str, n_sources: int) -> tuple[str, bool, bool]:
+    base, _ = tidy_section(text.strip(), True)
+    if not base or "gemini" not in _repair_engines():
+        return text, False, True
+    try:
+        extra, _, finish = gemini.complete(
+            COMPLETE_PROMPT.format(prompt=prompt, text=base), max_tokens=GEMINI_REPAIR_TOKENS
+        )
+    except gemini.GeminiUnavailable:
+        return text, False, True
+    extra = normalize_citations(strip_meta_notes(extra.strip()))
+    if not accept_continuation(extra, base, n_sources):
+        return text, False, True
+    last = base.splitlines()[-1].lstrip()
+    joiner = (
+        "\n" if extra.startswith("|") and last.startswith("|") else "\n\n" if extra.startswith(("|", "-", "*")) else " "
+    )
+    return base + joiner + extra, True, finish == "length"
+
+
 def _repair_engines() -> tuple:
     return ("gemini", "groq") if gemini.available() and gemini.status().get("ok") else ("groq", "groq")
 
@@ -436,6 +484,7 @@ def repair_paragraphs(
         if (tables and block.lstrip().startswith("|"))
         or language.block_is_english(block)
         or english_labels(block, titles)
+        or glossary_left(block, glossary, titles)
     ]
     engines = _repair_engines() if wanted else ()
     batch = _gemini_batch([blocks[i] for i in wanted], lang, glossary, titles) if "gemini" in engines else {}
@@ -453,7 +502,7 @@ def repair_paragraphs(
                 piece, extra = _repair_call(engine, prompt, model)
                 tokens += extra
             piece = fix_tables(strip_meta_notes(piece.strip()), block, lang)
-            if _accepted(piece, block, titles):
+            if _accepted(piece, block, titles) and not glossary_left(piece, glossary, titles):
                 blocks[i], repaired = piece, repaired + 1
                 stats[f"{engine}_ok"] += 1
                 break
@@ -486,7 +535,7 @@ def translate_section(
             text, lang, model, tables=True, glossary=glossary, titles=titles, stats=stats
         )
         return out, tokens + extra, False, 2
-    if language.has_english(out) or english_labels(out, titles):
+    if language.has_english(out) or english_labels(out, titles) or glossary_left(out, glossary, titles):
         out, extra, repaired, _ = repair_paragraphs(out, lang, model, glossary=glossary, titles=titles, stats=stats)
         return out, tokens + extra, truncated, 2 if repaired else 1
     return out, tokens, truncated, 1
@@ -575,17 +624,41 @@ def build_glossary(texts: list[str], names: dict, label: str, lang: str, model: 
 
 def _stem(text: str) -> str:
     words = re.findall(r"[^\W\d_]+", text.lower())
-    return words[0][:5] if words else ""
+    return max(words, key=len)[:5] if words else ""
+
+
+def _flat(text: str) -> str:
+    return " ".join(language.normalize(text).replace("-", " ").split())
+
+
+def _term_pattern(term: str) -> str:
+    stem = term[:-1] if term.endswith("s") and len(term) > 4 else term
+    return rf"(?<![a-z]){re.escape(stem)}s?(?![a-z])"
+
+
+def glossary_left(text: str, glossary, titles=()) -> bool:
+    if not glossary:
+        return False
+    plain = " " + " ".join(language._translatable(text).lower().replace("-", " ").split()) + " "
+    for title in titles:
+        plain = plain.replace(_flat(title), " ")
+    for key, target in glossary.items():
+        term = _flat(key)
+        if not term or term == _flat(target) or key.isupper() or len(term) < 4:
+            continue
+        if re.search(_term_pattern(term), plain):
+            return True
+    return False
 
 
 def misaligned(english: str, local: str, glossary: dict, skip=()) -> bool:
-    name, lowered = language.normalize(english), local.lower()
+    name, lowered = _flat(english), local.lower()
     for key, target in glossary.items():
-        term = language.normalize(key)
+        term = _flat(key)
         if key in skip or term == name or len(term) < 4 or same_text(key, target):
             continue
         stem = _stem(target)
-        if re.search(rf"(?<![a-z]){re.escape(term)}(?![a-z])", name) and len(stem) >= 4 and stem not in lowered:
+        if re.search(_term_pattern(term), name) and len(stem) >= 4 and stem not in lowered:
             return True
     return False
 
@@ -985,6 +1058,9 @@ def write_document(
             extra=DOCUMENT_RULES.format(topic=topic),
         )
         text, tokens, truncated = _call(prompt, model, item["tokens"])
+        completed = False
+        if truncated:
+            text, completed, truncated = complete_section(prompt, text, n)
         text, tidied = tidy_section(text.strip(), truncated)
         text, repeated = drop_repeated_heading(
             text, [item["heading"], item["theme"]["name"] if item["theme"] else None]
@@ -998,6 +1074,7 @@ def write_document(
                 "source": None,
                 "tokens": tokens,
                 "truncated": truncated,
+                "completed": completed,
                 "tidied": tidied or repeated,
                 "trimmed": truncated and tidied,
             }

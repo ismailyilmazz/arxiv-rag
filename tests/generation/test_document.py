@@ -1030,3 +1030,35 @@ def test_outliers_do_not_collapse_a_homogeneous_topic_into_one_theme(seed):
     labels = document.merge_small(document.cluster(vectors), vectors)
     sizes = sorted(Counter(labels.tolist()).values(), reverse=True)
     assert len(sizes) >= 3 and sizes[0] < 20
+
+
+def test_document_sections_cut_by_groq_are_completed_by_gemini(tmp_path, monkeypatch):
+    from arxiv_rag import config
+    from arxiv_rag.generation import gemini, writer
+
+    _fake_llm(monkeypatch)
+    original = writer._call
+
+    def cut(prompt, model, max_tokens):
+        text, tokens, finish = original(prompt, model, max_tokens)
+        if "Return only the title" in prompt:
+            return text, tokens, finish
+        return text + " The section then stops in the middle of a", tokens, True
+
+    rest = "It continues with a complete closing sentence that cites the first source properly and ends cleanly [1]."
+    monkeypatch.setattr(writer, "_call", cut)
+    monkeypatch.setattr(config, "GEMINI_API_KEY", "AQ.test")
+    monkeypatch.setattr(gemini, "status", lambda force=False: {"enabled": True, "ok": True})
+    monkeypatch.setattr(gemini, "complete", lambda prompt, **kw: (rest, 50, "stop"))
+    conn, pipeline = _world(tmp_path)
+    out = document.build_document(
+        conn,
+        connect(tmp_path / "c.db"),
+        pipeline,
+        "experts",
+        n_sources=8,
+        fetcher=lambda pid: fulltext.FullText(pid, "html", []),
+    )
+    written = [r for r in out["sections"] if "completed" in r]
+    assert written and all(r["completed"] and not r["truncated"] for r in written)
+    assert "stops in the middle of a" not in out["markdown"] and "ends cleanly" in out["markdown"]

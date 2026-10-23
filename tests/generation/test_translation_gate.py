@@ -586,3 +586,122 @@ def test_wide_bracket_citations_become_standard_citations():
     out, _ = writer.tidy_section("Background text cites【1】 and【2，3】 properly.")
     assert out == "Background text cites[1] and[2, 3] properly."
     assert writer.normalize_citations("Plain [1] text 【note】 stays.") == "Plain [1] text 【note】 stays."
+
+
+def test_short_first_words_and_hyphens_do_not_hide_a_wrong_theme_name():
+    glossary = {"bit commitment": "bit taahhüdü", "entanglement based": "dolanıklık tabanlı"}
+    english = "Impossibility of Secure Quantum Bit Commitment"
+    assert writer.misaligned(english, "Güvenli Kuantum Bit Bağlantısının İmkânsızlığı", glossary)
+    assert not writer.misaligned(english, "Güvenli Kuantum Bit Taahhüdünün İmkânsızlığı", glossary)
+    assert writer.misaligned("Entanglement‑Based QKD", "Dolgu Tabanlı QKD", glossary)
+
+
+def test_english_glossary_terms_left_in_prose_are_found_but_titles_are_not():
+    glossary = {"entanglement": "dolanıklık", "survey": "derleme"}
+    title = "Quantum cryptography with and without entanglement"
+    assert writer.glossary_left("Güvenliğin entanglement'ın kavramsal temeline dayandığı görülür [2].", glossary)
+    assert writer.glossary_left("Bu kapsamlı anket değil survey [25] konuyu özetler.", glossary)
+    assert not writer.glossary_left(f"{title} [1] çalışması dolanıklığı inceler.", glossary, [title])
+    assert not writer.glossary_left(
+        "**Private Entanglement over Arbitrary Channels** [4] dolanıklığı inceler.", glossary
+    )
+
+
+def test_paragraph_with_a_leftover_glossary_term_is_repaired(monkeypatch):
+    left = TR.replace("halüsinasyonlar", "hallucinations")
+    calls = _gemini_on(monkeypatch, (TR, 50, "stop"))
+    monkeypatch.setattr(llm, "complete", Script(left))
+    stats = writer.new_repair_stats()
+    out = writer.translate_section(EN, "survey", "tr", "m", {"hallucinations": "halüsinasyonlar"}, stats=stats)
+    assert out[0] == TR and len(calls) == 1 and stats["gemini_ok"] == 1
+
+
+def test_repair_that_keeps_the_english_term_is_rejected(monkeypatch):
+    left = TR.replace("halüsinasyonlar", "hallucinations")
+    _gemini_on(monkeypatch, (left, 50, "stop"))
+    monkeypatch.setattr(llm, "complete", Script(left, left))
+    stats = writer.new_repair_stats()
+    out = writer.translate_section(EN, "survey", "tr", "m", {"hallucinations": "halüsinasyonlar"}, stats=stats)
+    assert out[0] == left and stats["kept"] == 1
+
+
+def test_singular_and_plural_forms_of_a_glossary_term_match():
+    glossary = {"gravitational waves": "kütleçekim dalgaları"}
+    english = "Foundations of Gravitational-Wave Astronomy"
+    assert writer.misaligned(english, "Gravitasyon Dalga Astronomisinin Temelleri", glossary)
+    assert not writer.misaligned(english, "Kütleçekim Dalgası Astronomisinin Temelleri", glossary)
+    assert writer.glossary_left("Bu gravitational wave sinyali iki dedektörde görülür [2].", glossary)
+
+
+CUT = (
+    "Most studies agree that entanglement enables device-independent security [1]. "
+    "Several works also report that practical sources limit the key rate [2]. The remaining consensus points are"
+)
+REST = (
+    "First, every implementation relies on a careful characterization of the detectors [3]. "
+    "Second, the impossibility results for bit commitment hold across all surveyed models [4]."
+)
+
+
+def _gemini_continues(monkeypatch, reply):
+    from arxiv_rag import config
+    from arxiv_rag.generation import gemini
+
+    prompts = []
+
+    def complete(prompt, max_tokens=2000, model="", auth=""):
+        prompts.append(prompt)
+        if isinstance(reply, Exception):
+            raise reply
+        return reply
+
+    monkeypatch.setattr(config, "GEMINI_API_KEY", "AQ.test")
+    monkeypatch.setattr(gemini, "status", lambda force=False: {"enabled": True, "ok": True})
+    monkeypatch.setattr(gemini, "complete", complete)
+    return prompts
+
+
+def test_cut_section_is_completed_by_gemini_from_the_last_full_sentence(monkeypatch):
+    prompts = _gemini_continues(monkeypatch, (REST, 900, "stop"))
+    text, completed, truncated = writer.complete_section("TASK AND MATERIAL", CUT, 5)
+    base = "Most studies agree that entanglement enables device-independent security [1]. Several works also report that practical sources limit the key rate [2]."
+    assert completed and not truncated and text == f"{base} {REST}"
+    assert prompts[0].startswith("TASK AND MATERIAL") and "The remaining consensus points are" not in prompts[0]
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        f"{REST} A further claim cites an unknown source [9].",
+        "Most studies agree that entanglement enables device-independent security [1]. Several works also report that practical sources limit the key rate [2].",
+        "## New heading\n\n" + REST,
+        "Too short [1].",
+    ],
+)
+def test_bad_continuations_are_rejected(monkeypatch, reply):
+    _gemini_continues(monkeypatch, (reply, 100, "stop"))
+    text, completed, truncated = writer.complete_section("TASK", CUT, 5)
+    assert text == CUT and not completed and truncated
+
+
+def test_without_gemini_the_old_trimming_stays(monkeypatch):
+    from arxiv_rag.generation import gemini
+
+    _gemini_continues(monkeypatch, gemini.GeminiUnavailable("HTTP 429"))
+    assert writer.complete_section("TASK", CUT, 5) == (CUT, False, True)
+    assert writer.tidy_section(CUT, True)[0].endswith("limit the key rate [2].")
+
+
+def test_continuation_that_is_itself_cut_keeps_the_trimming_flag(monkeypatch):
+    _gemini_continues(monkeypatch, (REST + " Third, the field still lacks", 900, "length"))
+    text, completed, truncated = writer.complete_section("TASK", CUT, 5)
+    assert completed and truncated
+    assert writer.tidy_section(text, truncated)[0].endswith("hold across all surveyed models [4].")
+
+
+def test_cut_table_is_continued_on_the_next_row(monkeypatch):
+    table = "| Work | Year | Result |\n|---|---|---|\n| A [1] | 2001 | Good |\n| B [2] | 20"
+    row = "| B [2] | 2003 | Better detectors improved the rate considerably over earlier systems |\n| C [3] | 2005 | Field trial over thirty kilometres of fibre confirmed the earlier results |"
+    _gemini_continues(monkeypatch, (row, 300, "stop"))
+    text, completed, _ = writer.complete_section("TASK", table, 5)
+    assert completed and text.splitlines()[3] == row.splitlines()[0] and text.count("\n") == 4
