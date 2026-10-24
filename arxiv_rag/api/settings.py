@@ -27,6 +27,7 @@ class Settings:
     plans_per_ip_hour: int = 10
     generations_per_ip_day: int = 2
     generations_per_day: int = 5
+    document_workers: int = 2
     trust_proxy: bool = False
     preload: bool = False
 
@@ -44,6 +45,7 @@ class Settings:
             plans_per_ip_hour=_int("APP_PLANS_PER_IP_HOUR", 10),
             generations_per_ip_day=_int("APP_GENERATIONS_PER_IP_DAY", 2),
             generations_per_day=_int("APP_GENERATIONS_PER_DAY", 5),
+            document_workers=_int("APP_DOCUMENT_WORKERS", 2),
             trust_proxy=os.getenv("APP_TRUST_PROXY", "0") == "1",
             preload=os.getenv("APP_PRELOAD", "0") == "1",
         )

@@ -1,5 +1,6 @@
 import json
 import sqlite3
+import threading
 import time
 
 from fastapi.testclient import TestClient
@@ -266,3 +267,83 @@ def test_search_cleans_tex_titles_and_logs_one_line(tmp_path, capsys):
     lines = [json.loads(line) for line in capsys.readouterr().err.splitlines() if line.startswith("{")]
     assert [line["event"] for line in lines] == ["search"]
     assert lines[0]["query"] == "mixture of experts" and lines[0]["results"] == 2
+
+
+def wait_job(client, job_id, seconds=10):
+    deadline = time.time() + seconds
+    while time.time() < deadline:
+        job = client.get(f"/api/jobs/{job_id}").json()
+        if job["status"] in ("done", "failed"):
+            return job
+        time.sleep(0.05)
+    raise AssertionError("iş bitmedi")
+
+
+def _two_users(client):
+    users = (("experts", "1.1.1.1"), ("routing", "2.2.2.2"))
+    plans = [
+        wait_job(client, client.post("/api/plans", json={"topic": t}, headers={"X-Forwarded-For": ip}).json()["job_id"])
+        for t, ip in users
+    ]
+    return [
+        client.post("/api/documents", json={"plan_id": p["plan_id"]}, headers={"X-Forwarded-For": ip}).json()
+        for p, (_, ip) in zip(plans, users)
+    ]
+
+
+def test_two_users_from_different_places_are_written_at_the_same_time(tmp_path):
+    barrier = threading.Barrier(2, timeout=5)
+
+    class Together(Recorder):
+        def __call__(self, sel, removed, progress):
+            barrier.wait()
+            return super().__call__(sel, removed, progress)
+
+    app, client, _ = build(tmp_path, runner=Together(), start_workers=True, trust_proxy=True, document_workers=2)
+    try:
+        docs = _two_users(client)
+        assert [d["position"] for d in docs] == [1, 1]
+        finished = [wait_job(client, d["job_id"]) for d in docs]
+        assert [j["status"] for j in finished] == ["done", "done"], [j["error"] for j in finished]
+        assert all(client.get(f"/api/jobs/{d['job_id']}/document").text.startswith("# Başlık") for d in docs)
+    finally:
+        for worker in app.state.workers.values():
+            worker.stop()
+
+
+def test_with_one_worker_the_second_user_waits_in_line(tmp_path):
+    app, client, _ = build(tmp_path, trust_proxy=True, document_workers=1)
+    docs = _two_users_queued(app, client)
+    assert [d["position"] for d in docs] == [1, 2]
+
+
+def _two_users_queued(app, client):
+    users = (("experts", "1.1.1.1"), ("routing", "2.2.2.2"))
+    plan_ids = []
+    for topic, ip in users:
+        client.post("/api/plans", json={"topic": topic}, headers={"X-Forwarded-For": ip})
+        run(app, "plan")
+    for job in app.state.store.conn.execute("SELECT plan_id FROM jobs WHERE kind = 'plan' ORDER BY created_at"):
+        plan_ids.append(job[0])
+    return [
+        client.post("/api/documents", json={"plan_id": pid}, headers={"X-Forwarded-For": ip}).json()
+        for pid, (_, ip) in zip(plan_ids, users)
+    ]
+
+
+def test_each_job_is_claimed_exactly_once_by_many_workers(tmp_path):
+    store = Store(tmp_path / "app.db")
+    ids = [store.add_job("document", "1.1.1.1", {}, None) for _ in range(20)]
+    claimed, guard = [], threading.Lock()
+
+    def grab():
+        while job := store.claim_next("document"):
+            with guard:
+                claimed.append(job["id"])
+
+    threads = [threading.Thread(target=grab) for _ in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert sorted(claimed) == sorted(ids)

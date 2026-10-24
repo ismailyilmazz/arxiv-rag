@@ -108,7 +108,10 @@ def create_app(
             "tokens": result.get("tokens", {}).get("total"),
         }
 
-    workers = {"plan": Worker(store, "plan", plan_handler), "document": Worker(store, "document", document_handler)}
+    workers = {
+        "plan": Worker(store, "plan", plan_handler),
+        "document": Worker(store, "document", document_handler, settings.document_workers),
+    }
     app = FastAPI(title="arXiv araştırma asistanı", version="0.7.0")
     app.state.store, app.state.workers, app.state.settings = store, workers, settings
     if start_workers:
@@ -127,7 +130,7 @@ def create_app(
     def enqueue(kind: str, ip: str, request: dict, plan_id: Optional[str] = None) -> dict:
         job_id = store.add_job(kind, ip, request, plan_id)
         workers[kind].notify()
-        return {"job_id": job_id, "position": store.position(job_id)}
+        return {"job_id": job_id, "position": store.position(job_id, workers[kind].concurrency)}
 
     def job_or_404(job_id: str) -> dict:
         job = store.get_job(job_id)
@@ -241,7 +244,7 @@ def create_app(
             "stage": job["stage"],
             "done": job["done"],
             "total": job["total"],
-            "position": store.position(job_id),
+            "position": store.position(job_id, workers[job["kind"]].concurrency),
             "error": job["error"],
             "plan_id": job["plan_id"],
             "summary": job["summary"],

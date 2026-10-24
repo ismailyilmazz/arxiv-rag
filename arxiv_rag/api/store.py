@@ -81,7 +81,21 @@ class Store:
         row = self._one("SELECT id FROM jobs WHERE kind = ? AND status = 'queued' ORDER BY created_at LIMIT 1", (kind,))
         return self.get_job(row["id"]) if row else None
 
-    def position(self, job_id: str) -> int:
+    def claim_next(self, kind: str) -> Optional[dict]:
+        with self.lock:
+            row = self.conn.execute(
+                "SELECT id FROM jobs WHERE kind = ? AND status = 'queued' ORDER BY created_at LIMIT 1", (kind,)
+            ).fetchone()
+            if not row:
+                return None
+            self.conn.execute(
+                "UPDATE jobs SET status = 'running', started_at = ?, done = 0, total = 0 WHERE id = ?",
+                (time.time(), row["id"]),
+            )
+            self.conn.commit()
+        return self.get_job(row["id"])
+
+    def position(self, job_id: str, workers: int = 1) -> int:
         job = self._one("SELECT kind, created_at, status FROM jobs WHERE id = ?", (job_id,))
         if not job or job["status"] != "queued":
             return 0
@@ -89,7 +103,7 @@ class Store:
             "SELECT COUNT(*) AS n FROM jobs WHERE kind = ? AND status IN (?, ?) AND created_at < ?",
             (job["kind"], *ACTIVE, job["created_at"]),
         )
-        return ahead["n"] + 1
+        return max(1, ahead["n"] + 2 - max(1, workers))
 
     def active_count(self, kind: str) -> int:
         return self._one("SELECT COUNT(*) AS n FROM jobs WHERE kind = ? AND status IN (?, ?)", (kind, *ACTIVE))["n"]

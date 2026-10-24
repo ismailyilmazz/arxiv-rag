@@ -8,13 +8,17 @@ RESTART_MESSAGE = "Sunucu yeniden başladı; bu iş tamamlanamadı. Lütfen tekr
 
 
 class Worker:
-    def __init__(self, store: Store, kind: str, handler: Callable):
+    def __init__(self, store: Store, kind: str, handler: Callable, concurrency: int = 1):
         self.store, self.kind, self.handler = store, kind, handler
+        self.concurrency = max(1, concurrency)
         self.event, self.stopped = threading.Event(), False
-        self.thread = threading.Thread(target=self._loop, name=f"worker-{kind}", daemon=True)
+        self.threads = [
+            threading.Thread(target=self._loop, name=f"worker-{kind}-{i}", daemon=True) for i in range(self.concurrency)
+        ]
 
     def start(self) -> None:
-        self.thread.start()
+        for thread in self.threads:
+            thread.start()
 
     def stop(self) -> None:
         self.stopped = True
@@ -30,11 +34,10 @@ class Worker:
                 self.event.clear()
 
     def run_once(self) -> bool:
-        job = self.store.next_queued(self.kind)
+        job = self.store.claim_next(self.kind)
         if not job:
             return False
         job_id = job["id"]
-        self.store.update_job(job_id, status="running", started_at=time.time(), done=0, total=0)
 
         def progress(stage, done, total):
             return self.store.update_job(job_id, stage=stage, done=done, total=total)
