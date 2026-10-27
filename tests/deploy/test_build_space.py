@@ -1,3 +1,4 @@
+import json
 import shutil
 import zipfile
 from pathlib import Path
@@ -98,3 +99,17 @@ def test_space_app_keeps_port_7860_for_our_server():
     assert "ssr_mode=False" in source and "port=7860" in source
     assert "demo.launch(" in source and "server_port=7861" in source
     assert '"QUERY_TRANSLATION": "replace"' in source
+
+
+def test_build_writes_the_commit_for_the_health_check(tmp_path):
+    root = fake_repo(tmp_path)
+    build_space.build(tmp_path / "out" / "hf-space", root, commit="abc123")
+    info = json.loads((tmp_path / "out" / "hf-space" / "build.json").read_text(encoding="utf-8"))
+    assert info["commit"] == "abc123" and info["built_at"].endswith("+00:00")
+
+
+def test_commit_comes_from_github_or_git(tmp_path, monkeypatch):
+    monkeypatch.setenv("GITHUB_SHA", "fromgithub")
+    assert build_space.current_commit(tmp_path) == "fromgithub"
+    monkeypatch.delenv("GITHUB_SHA")
+    assert build_space.current_commit(tmp_path) == ""

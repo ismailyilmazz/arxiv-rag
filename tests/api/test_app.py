@@ -347,3 +347,32 @@ def test_each_job_is_claimed_exactly_once_by_many_workers(tmp_path):
     for thread in threads:
         thread.join()
     assert sorted(claimed) == sorted(ids)
+
+
+def test_health_shows_the_live_commit_and_the_data_version(tmp_path, monkeypatch):
+    from arxiv_rag import config
+
+    (tmp_path / "build.json").write_text(
+        '{"commit": "abc123", "built_at": "2026-10-25T10:00:00+00:00"}', encoding="utf-8"
+    )
+    data = tmp_path / "data"
+    data.mkdir()
+    (data / "manifest.json").write_text(
+        '{"papers": 3182775, "created_at": "2026-10-18T09:00:00+00:00"}', encoding="utf-8"
+    )
+    monkeypatch.setenv("APP_BUILD_FILE", str(tmp_path / "build.json"))
+    monkeypatch.setattr(config, "DATA_DIR", data)
+    _, client, _ = build(tmp_path)
+    health = client.get("/api/health").json()
+    assert health["build"] == {"commit": "abc123", "built_at": "2026-10-25T10:00:00+00:00"}
+    assert health["data"] == {"papers": 3182775, "created_at": "2026-10-18T09:00:00+00:00"}
+
+
+def test_health_without_build_or_manifest_says_unknown(tmp_path, monkeypatch):
+    from arxiv_rag import config
+
+    monkeypatch.setenv("APP_BUILD_FILE", str(tmp_path / "yok.json"))
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path / "bos")
+    _, client, _ = build(tmp_path)
+    health = client.get("/api/health").json()
+    assert health["build"] == {"commit": None, "built_at": None} and health["data"]["papers"] is None

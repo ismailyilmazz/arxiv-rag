@@ -1,5 +1,9 @@
 import argparse
+import datetime
+import json
+import os
 import shutil
+import subprocess
 import tomllib
 from pathlib import Path
 
@@ -14,7 +18,18 @@ def requirements(pyproject: Path) -> list[str]:
     return [r for r in wanted if r.split("=")[0].split("<")[0].split(">")[0].strip() not in EXCLUDED]
 
 
-def build(out: Path, root: Path = config.ROOT) -> Path:
+def current_commit(root: Path = config.ROOT) -> str:
+    if os.getenv("GITHUB_SHA"):
+        return os.environ["GITHUB_SHA"]
+    try:
+        return subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "HEAD"], capture_output=True, text=True, check=True
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        return ""
+
+
+def build(out: Path, root: Path = config.ROOT, commit: str = "") -> Path:
     dist = root / "frontend" / "dist"
     if not (dist / "index.html").exists():
         raise SystemExit("Derlenmiş arayüz yok. Önce: cd frontend && npm ci && npm run build")
@@ -30,6 +45,8 @@ def build(out: Path, root: Path = config.ROOT) -> Path:
     for rel in ("scripts/__init__.py", "scripts/deploy/__init__.py", "scripts/deploy/fetch_data.py"):
         shutil.copy(root / rel, out / rel)
     shutil.copytree(dist, out / "frontend" / "dist")
+    built_at = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
+    (out / "build.json").write_text(json.dumps({"commit": commit, "built_at": built_at}), encoding="utf-8")
     return Path(shutil.make_archive(str(out), "zip", out))
 
 
@@ -48,8 +65,9 @@ def main() -> None:
     p = argparse.ArgumentParser(description="Hugging Face Space paketini repodan üretir.")
     p.add_argument("--out", type=Path, default=config.ROOT / "build" / "hf-space")
     p.add_argument("--push", metavar="SPACE_ID", help="Paketi bu Space'e yükler, örneğin ismailylmz283/arxiv-rag")
+    p.add_argument("--commit", default=None, help="Pakete yazılacak commit; verilmezse GITHUB_SHA ya da git")
     args = p.parse_args()
-    archive = build(args.out)
+    archive = build(args.out, commit=args.commit if args.commit is not None else current_commit())
     files = sum(1 for f in args.out.rglob("*") if f.is_file())
     print(f"{files} dosya: {args.out}")
     print(f"Zip: {archive}")

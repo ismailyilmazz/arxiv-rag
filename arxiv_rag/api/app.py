@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 import threading
 import time
@@ -9,6 +10,7 @@ from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from arxiv_rag import config
 from arxiv_rag.api.schemas import DocumentIn, PlanIn, SearchIn
 from arxiv_rag.api.settings import Settings
 from arxiv_rag.api.store import Store
@@ -58,6 +60,22 @@ def document_paths(output_dir: Path, job_id: str) -> tuple[Path, Path]:
 def log_event(event: str, **fields) -> None:
     line = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "event": event, **fields}
     print(json.dumps(line, ensure_ascii=False), file=sys.stderr, flush=True)
+
+
+def build_info() -> dict:
+    try:
+        info = json.loads(Path(os.getenv("APP_BUILD_FILE", "build.json")).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {"commit": None, "built_at": None}
+    return {"commit": info.get("commit") or None, "built_at": info.get("built_at")}
+
+
+def data_info() -> dict:
+    try:
+        manifest = json.loads((config.DATA_DIR / "manifest.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {"papers": None, "created_at": None}
+    return {"papers": manifest.get("papers"), "created_at": manifest.get("created_at")}
 
 
 def create_app(
@@ -144,6 +162,8 @@ def create_app(
     def health():
         return {
             "status": "ok",
+            "build": build_info(),
+            "data": data_info(),
             "pipeline_loaded": "pipeline" in shared,
             "gemini": gemini.status(),
             "queue": {kind: store.active_count(kind) for kind in workers},

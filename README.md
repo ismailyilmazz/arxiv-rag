@@ -60,6 +60,10 @@ python -m scripts.generation.generate --topic "Mixture of experts for large lang
 
 ## Yayın (Hugging Face Space)
 
+`main`'e push edilen her commit CI'dan geçerse `Deploy` iş akışı arayüzü derler, kuyruk boşalınca Space'e yükler ve
+`/api/health` cevabındaki `build.commit` o commit'i gösterene kadar bekler. Bunun için repo ayarlarında `HF_TOKEN` (Write)
+gizli anahtarı gerekir. Elle yükleme yedek yol olarak duruyor:
+
 ```
 cd frontend
 npm run build
