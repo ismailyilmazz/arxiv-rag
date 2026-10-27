@@ -1,5 +1,7 @@
 # arXiv Araştırma Asistanı
 
+[![CI](https://github.com/ismailyilmazz/arxiv-rag/actions/workflows/ci.yml/badge.svg)](https://github.com/ismailyilmazz/arxiv-rag/actions/workflows/ci.yml)
+
 Bir konu yazarsın (Türkçe ya da İngilizce). Sistem 3,18 milyon arXiv makalesi içinde anlamsal arama, BM25, öğrenen
 sıralayıcı ve bekçi modeliyle ilgili makaleleri bulur; 30 kaynaklık bir plan çıkarır, sen onaylarsın, sonra seçtiğin
 türde (literatür taraması, araştırma önerisi, sentez raporu) her iddiası kaynağına bağlı bir metin yazılır.
