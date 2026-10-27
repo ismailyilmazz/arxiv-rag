@@ -1,0 +1,61 @@
+name: Data update
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+    inputs:
+      from:
+        description: "Başlangıç tarihi (YYYY-AA-GG); boş bırakılırsa son başarılı tarihten devam eder"
+        required: false
+        default: ""
+      dry_run:
+        description: "Deneme: çek ve göm, ama yayımlama"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: data-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    name: Günlük veri güncellemesi
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - name: Anahtarları kontrol et
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          ARXIV_CONTACT_EMAIL: ${{ secrets.ARXIV_CONTACT_EMAIL }}
+        run: |
+          if [ -z "$HF_TOKEN" ] || [ -z "$ARXIV_CONTACT_EMAIL" ]; then
+            echo "HF_TOKEN ve ARXIV_CONTACT_EMAIL tanımlı olmalı: repo -> Settings -> Secrets and variables -> Actions"
+            exit 1
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Bağımlılıkları kur
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch==2.13.0 --index-url https://download.pytorch.org/whl/cpu
+          pip install -e ".[embed]" huggingface_hub==2.2.0
+      - name: Çek, göm ve yayımla
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          ARXIV_CONTACT_EMAIL: ${{ secrets.ARXIV_CONTACT_EMAIL }}
+          ENCODER_DEVICE: cpu
+          START: ${{ inputs.from }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          args=()
+          if [ -n "$START" ]; then args+=(--from "$START"); fi
+          if [ "$DRY_RUN" = "true" ]; then args+=(--dry-run); fi
+          python -m scripts.data.update_data "${args[@]}"

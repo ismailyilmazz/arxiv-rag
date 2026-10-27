@@ -71,6 +71,10 @@ def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA)
 
 
+def upsert_rows(conn: sqlite3.Connection, rows: Iterable[tuple]) -> None:
+    conn.executemany(_UPSERT, rows)
+
+
 def upsert_papers(conn: sqlite3.Connection, rows: Iterable[tuple]) -> None:
     with conn:
-        conn.executemany(_UPSERT, rows)
+        upsert_rows(conn, rows)

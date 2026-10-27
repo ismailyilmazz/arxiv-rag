@@ -25,6 +25,7 @@ import gradio as gr
 import uvicorn
 
 from arxiv_rag.api.app import create_app
+from arxiv_rag.storage.deltas import apply_deltas
 from scripts.deploy.fetch_data import DEFAULT_REPO, fetch
 
 
@@ -36,6 +37,11 @@ def unused_gpu_function():
 if os.getenv("SKIP_DATA_DOWNLOAD") != "1":
     manifest = fetch(DATA, os.getenv("HF_DATA_REPO", DEFAULT_REPO), os.getenv("HF_TOKEN") or None)
     print(f"Veri hazır: {len(manifest['files'])} dosya, {manifest.get('papers')} makale", flush=True)
+    try:
+        summary = apply_deltas(DATA, manifest)
+        print(f"Günlük güncellemeler: {summary['applied']} uygulandı, hatalar: {summary['errors']}", flush=True)
+    except Exception as error:
+        print(f"Günlük güncellemeler uygulanamadı, ana veriyle devam: {error}", flush=True)
 
 app = create_app()
 with gr.Blocks(title="arXiv araştırma asistanı") as demo:

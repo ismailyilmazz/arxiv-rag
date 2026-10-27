@@ -7,7 +7,7 @@ from typing import Callable, Optional
 from arxiv_rag import config
 
 DEFAULT_REPO = "ismailylmz283/arxiv-rag-data"
-PATTERNS = ["papers.db", "vectors/*", "models/*", "manifest.json"]
+PATTERNS = ["papers.db", "vectors/*", "models/*", "manifest.json", "deltas/*/*"]
 
 
 def hub_download(repo_id: str, target: Path, token: Optional[str]) -> None:

@@ -376,3 +376,20 @@ def test_health_without_build_or_manifest_says_unknown(tmp_path, monkeypatch):
     _, client, _ = build(tmp_path)
     health = client.get("/api/health").json()
     assert health["build"] == {"commit": None, "built_at": None} and health["data"]["papers"] is None
+
+
+def test_health_reports_applied_daily_updates(tmp_path, monkeypatch):
+    from arxiv_rag import config
+
+    data = tmp_path / "data"
+    data.mkdir()
+    (data / "manifest.json").write_text('{"papers": 100, "created_at": "2026-10-18T09:00:00+00:00"}', encoding="utf-8")
+    (data / "deltas_applied.json").write_text(
+        '{"applied": ["2026-10-26", "2026-10-27"], "errors": ["2026-10-25: bozuk"], "added": 7, "updated": 2}',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(config, "DATA_DIR", data)
+    _, client, _ = build(tmp_path)
+    info = client.get("/api/health").json()["data"]
+    assert info["papers"] == 107 and info["updated_to"] == "2026-10-27" and info["deltas_applied"] == 2
+    assert info["delta_errors"] == ["2026-10-25: bozuk"]

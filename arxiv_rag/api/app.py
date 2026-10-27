@@ -18,6 +18,7 @@ from arxiv_rag.api.worker import RESTART_MESSAGE, Worker
 from arxiv_rag.generation import document, gemini
 from arxiv_rag.storage.arxiv_ids import abs_url
 from arxiv_rag.storage.db import connect
+from arxiv_rag.storage.deltas import read_summary
 from arxiv_rag.storage.tex import clean_authors, clean_tex
 
 
@@ -75,7 +76,16 @@ def data_info() -> dict:
         manifest = json.loads((config.DATA_DIR / "manifest.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {"papers": None, "created_at": None}
-    return {"papers": manifest.get("papers"), "created_at": manifest.get("created_at")}
+    applied = read_summary(config.DATA_DIR)
+    papers = manifest.get("papers")
+    info = {"papers": papers + applied.get("added", 0) if papers else papers, "created_at": manifest.get("created_at")}
+    if applied:
+        info.update(
+            updated_to=max(applied.get("applied") or [None], key=lambda d: d or ""),
+            deltas_applied=len(applied.get("applied", [])),
+            delta_errors=applied.get("errors", []),
+        )
+    return info
 
 
 def create_app(
