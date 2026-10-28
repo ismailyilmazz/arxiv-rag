@@ -2,7 +2,7 @@ name: Data update
 
 on:
   schedule:
-    - cron: "0 6 * * *"
+    - cron: "0 6 * * 0"
   workflow_dispatch:
     inputs:
       from:
@@ -23,7 +23,7 @@ concurrency:
 
 jobs:
   update:
-    name: Günlük veri güncellemesi
+    name: Haftalık veri güncellemesi
     runs-on: ubuntu-latest
     timeout-minutes: 240
     steps:

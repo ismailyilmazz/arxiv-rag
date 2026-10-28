@@ -80,7 +80,7 @@ alanında görünür.
 - `CI`: her push ve pull request'te, ayrıca her pazartesi; Python 3.11/3.12 testleri, lint ve arayüz.
 - `Deploy`: `main`'de CI geçince Space'e yükler ve `/api/health`'te yeni commit'i bekler.
 - `Smoke`: her pazartesi canlı siteyi yoklar ve LLM kotası harcamayan İngilizce bir arama yapar.
-- `Data update`: her gün arXiv OAI-PMH'den (`https://oaipmh.arxiv.org/oai`) yeni ve güncellenen kayıtları çeker, gömer ve
+- `Data update`: her pazar arXiv OAI-PMH'den (`https://oaipmh.arxiv.org/oai`) yeni ve güncellenen kayıtları çeker, gömer ve
   veri deposuna delta olarak yayımlar; Space açılışta delta'ları uygular. Çekme ya da kalite kontrolü başarısız olursa
   hiçbir şey yayımlanmaz ve son başarılı tarih ilerlemez. Bozuk bir delta Space'i durdurmaz, atlanır ve `/api/health`
   cevabında görünür. Gerekenler: `HF_TOKEN` ve `ARXIV_CONTACT_EMAIL` gizli anahtarları.
