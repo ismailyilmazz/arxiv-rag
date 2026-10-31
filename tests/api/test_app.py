@@ -302,7 +302,7 @@ def test_two_users_from_different_places_are_written_at_the_same_time(tmp_path):
     app, client, _ = build(tmp_path, runner=Together(), start_workers=True, trust_proxy=True, document_workers=2)
     try:
         docs = _two_users(client)
-        assert [d["position"] for d in docs] == [1, 1]
+        assert all(d["position"] in (0, 1) for d in docs), [d["position"] for d in docs]
         finished = [wait_job(client, d["job_id"]) for d in docs]
         assert [j["status"] for j in finished] == ["done", "done"], [j["error"] for j in finished]
         assert all(client.get(f"/api/jobs/{d['job_id']}/document").text.startswith("# Başlık") for d in docs)

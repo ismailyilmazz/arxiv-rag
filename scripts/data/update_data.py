@@ -4,12 +4,15 @@ import json
 import os
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import Callable, Optional
 
 from arxiv_rag.search.embeddings import passage_text
+from arxiv_rag.storage.db import COLUMNS
 from arxiv_rag.storage.deltas import add_delta, write_delta
 from arxiv_rag.storage.oai import check, harvest, http_get
+from scripts.data import kaggle_embed
 from scripts.deploy import wait_live
 
 DATA_REPO = "ismailylmz283/arxiv-rag-data"
@@ -28,11 +31,51 @@ def read_json(api, repo: str, name: str) -> Optional[dict]:
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
-def embed(rows: list[dict], model: str):
-    from arxiv_rag.search.embeddings import Encoder
+def embed(
+    rows: list[dict],
+    model: str,
+    encoder=None,
+    chunk: int = 1000,
+    log: Callable = print,
+    clock=time.monotonic,
+    batch_size: int = 32,
+):
+    import numpy as np
 
-    encoder = Encoder(model, device="cpu")
-    return encoder.encode_passages([passage_text(r["title"], r["abstract"]) for r in rows], batch_size=32)
+    if encoder is None:
+        from arxiv_rag.search.embeddings import Encoder
+
+        encoder = Encoder(model, device="cpu")
+    texts = [passage_text(r["title"], r["abstract"]) for r in rows]
+    parts, started = [], clock()
+    for i in range(0, len(texts), chunk):
+        parts.append(encoder.encode_passages(texts[i : i + chunk], batch_size=batch_size))
+        done = min(i + chunk, len(texts))
+        rate = done / max(clock() - started, 1e-9)
+        left = (len(texts) - done) / rate if rate else 0
+        log(
+            f"gömme: {done}/{len(texts)} kayıt, saniyede {rate:.1f} kayıt, kalan yaklaşık {left / 60:.0f} dk",
+            flush=True,
+        )
+    return np.concatenate(parts) if parts else np.zeros((0, 0), dtype=np.float32)
+
+
+def can_write(api, repo: str) -> tuple[bool, str]:
+    try:
+        token = (api.whoami().get("auth") or {}).get("accessToken") or {}
+    except Exception as error:
+        return False, f"HF_TOKEN doğrulanamadı: {error}"
+    role = token.get("role")
+    if role == "write":
+        return True, "HF_TOKEN yazma yetkili"
+    if role == "fineGrained":
+        owner = repo.split("/")[0]
+        for scope in (token.get("fineGrained") or {}).get("scoped") or []:
+            entity = scope.get("entity") or {}
+            if entity.get("name") in (owner, repo) and "repo.write" in (scope.get("permissions") or []):
+                return True, "HF_TOKEN ince ayarlı, veri deposuna yazma izni var"
+        return True, "HF_TOKEN ince ayarlı; yazma izni doğrulanamadı, yayımlama adımında belli olacak"
+    return False, f"HF_TOKEN yazma yetkili değil (rol: {role}); Hugging Face'te Write yetkili bir token gerekli"
 
 
 def run(
@@ -49,9 +92,16 @@ def run(
     get: Callable = http_get,
     idle: Callable = wait_live.idle,
     workdir: Optional[Path] = None,
+    kaggle: Optional[Callable] = None,
 ) -> int:
-    from huggingface_hub import CommitOperationAdd
+    from huggingface_hub import CommitOperationAdd, CommitOperationDelete
 
+    if not dry_run:
+        ok, note = can_write(api, repo)
+        print(note, flush=True)
+        if not ok:
+            print("hiçbir şey çekilmedi ya da yayımlanmadı")
+            return 1
     manifest = read(api, repo, "manifest.json")
     if not manifest:
         print("manifest.json okunamadı; hiçbir şey yayımlanmadı")
@@ -79,8 +129,33 @@ def run(
         "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
     }
     operations, workdir = [], Path(workdir or tempfile.mkdtemp())
+    staging = f"staging/{until}/papers.parquet"
+    staged = False
     if rows:
-        vectors = encode(rows, manifest.get("embedding_model", "granite-311m-384"))
+        model = manifest.get("embedding_model", "granite-311m-384")
+        vectors = None
+        if kaggle is not None:
+            try:
+                import pandas as pd
+
+                (workdir / "staging").mkdir(parents=True, exist_ok=True)
+                pd.DataFrame(rows, columns=list(COLUMNS)).to_parquet(
+                    workdir / "staging" / "papers.parquet", index=False
+                )
+                api.create_commit(
+                    repo_id=repo,
+                    repo_type="dataset",
+                    operations=[CommitOperationAdd(staging, str(workdir / "staging" / "papers.parquet"))],
+                    commit_message=f"Geçici kayıtlar {until} (Kaggle gömmesi için)",
+                )
+                staged = True
+                vectors = kaggle([r["id"] for r in rows], staging, model, workdir)
+                print(f"Kaggle GPU ile {len(vectors)} kayıt gömüldü", flush=True)
+            except Exception as error:
+                print(f"Kaggle ile gömülemedi ({error}); CPU ile gömülüyor", flush=True)
+                vectors = None
+        if vectors is None:
+            vectors = encode(rows, model)
         if len(vectors) != len(rows):
             print("gömme sayısı kayıt sayısını tutmuyor, hiçbir şey yayımlanmadı")
             return 1
@@ -94,9 +169,18 @@ def run(
         operations.append(CommitOperationAdd(name, str(workdir / name)))
     if dry_run:
         print(f"deneme modu: {len(operations)} dosya yayımlanacaktı, yayımlanmadı")
+        if staged:
+            api.create_commit(
+                repo_id=repo,
+                repo_type="dataset",
+                operations=[CommitOperationDelete(staging)],
+                commit_message=f"Geçici kayıtlar silindi {until}",
+            )
         return 0
+    if staged:
+        operations.append(CommitOperationDelete(staging))
     api.create_commit(
-        repo_id=repo, repo_type="dataset", operations=operations, commit_message=f"Günlük güncelleme {until}"
+        repo_id=repo, repo_type="dataset", operations=operations, commit_message=f"Haftalık güncelleme {until}"
     )
     print(f"yayımlandı: {len(rows)} kayıt, son başarılı tarih {until}", flush=True)
     if rows and space:
@@ -127,7 +211,19 @@ def main() -> None:
 
     api = HfApi(token=os.environ["HF_TOKEN"])
     space = None if args.no_restart else SPACE_ID
-    sys.exit(run(api, contact, args.repo, args.start, args.until, args.dry_run, space))
+    kaggle = None
+    if kaggle_embed.ready():
+        sha = os.getenv("GITHUB_SHA") or "main"
+        packages = kaggle_embed.packages(Path(__file__).resolve().parents[2] / "pyproject.toml")
+
+        def kaggle(ids, staging, model, workdir):
+            kid = kaggle_embed.kernel_id()
+            files = kaggle_embed.kernel_files(kid, sha, args.repo, staging, model, packages)
+            return kaggle_embed.embed_on_kaggle(ids, kid, files, workdir)
+
+    else:
+        print("Kaggle anahtarları yok; gömme CPU ile yapılacak", flush=True)
+    sys.exit(run(api, contact, args.repo, args.start, args.until, args.dry_run, space, kaggle=kaggle))
 
 
 if __name__ == "__main__":

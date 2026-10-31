@@ -83,7 +83,9 @@ alanında görünür.
 - `Data update`: her pazar arXiv OAI-PMH'den (`https://oaipmh.arxiv.org/oai`) yeni ve güncellenen kayıtları çeker, gömer ve
   veri deposuna delta olarak yayımlar; Space açılışta delta'ları uygular. Çekme ya da kalite kontrolü başarısız olursa
   hiçbir şey yayımlanmaz ve son başarılı tarih ilerlemez. Bozuk bir delta Space'i durdurmaz, atlanır ve `/api/health`
-  cevabında görünür. Gerekenler: `HF_TOKEN` ve `ARXIV_CONTACT_EMAIL` gizli anahtarları.
+  cevabında görünür. Gömme, Kaggle anahtarları varsa Kaggle GPU'sunda ana veriyle aynı ayarlarla yapılır;
+  Kaggle başarısız olursa iş CPU ile devam eder. Gerekenler: `HF_TOKEN`, `ARXIV_CONTACT_EMAIL`, isteğe bağlı olarak
+  `KAGGLE_USERNAME` ile `KAGGLE_KEY` (ya da `KAGGLE_API_TOKEN`) gizli anahtarları.
 
 ## Testler
 

@@ -25,7 +25,7 @@ jobs:
   update:
     name: Haftalık veri güncellemesi
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+    timeout-minutes: 360
     steps:
       - name: Anahtarları kontrol et
         env:
@@ -46,12 +46,15 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install torch==2.13.0 --index-url https://download.pytorch.org/whl/cpu
-          pip install -e ".[embed]" huggingface_hub==1.33.0
+          pip install -e ".[embed]" huggingface_hub==1.33.0 kaggle==2.2.4
       - name: Çek, göm ve yayımla
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           ARXIV_CONTACT_EMAIL: ${{ secrets.ARXIV_CONTACT_EMAIL }}
           ENCODER_DEVICE: cpu
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+          KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
           START: ${{ inputs.from }}
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
