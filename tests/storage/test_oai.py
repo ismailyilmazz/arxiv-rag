@@ -78,3 +78,23 @@ def test_quality_check_flags_too_many_or_empty_records():
     assert oai.check(good) == []
     assert oai.check(good, limit=10)
     assert oai.check(good + [{"id": f"e{i}", "title": "", "abstract": "a"} for i in range(20)])
+
+
+def test_timeouts_are_retried_with_growing_waits_and_logged(monkeypatch):
+    sleeps, lines = [], []
+
+    def urlopen(request, timeout=0):
+        raise TimeoutError("The read operation timed out")
+
+    monkeypatch.setattr(oai.urllib.request, "urlopen", urlopen)
+    with pytest.raises(TimeoutError):
+        oai.http_get("https://x", "me@x.org", retries=8, sleep=sleeps.append, log=lambda m, **k: lines.append(m))
+    assert sleeps == [30, 60, 120, 240, 300, 300, 300]
+    assert lines[0].startswith("arXiv cevap vermedi (deneme 1/8") and "timed out" in lines[0]
+
+
+def test_harvest_reports_every_page():
+    lines = []
+    replies = iter([page([record("2610.00001")], "tok"), page([record("2610.00002"), record("2610.00003")])])
+    oai.harvest("a", "b", "c", lambda u, c: next(replies), lambda s: None, log=lambda m, **k: lines.append(m))
+    assert lines == ["sayfa 1: toplam 1 kayıt", "sayfa 2: toplam 3 kayıt"]

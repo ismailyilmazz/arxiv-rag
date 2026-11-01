@@ -12,7 +12,7 @@ NS = {"oai": "http://www.openarchives.org/OAI/2.0/", "arxiv": "http://arxiv.org/
 DELAY_SECONDS = 3.0
 
 
-def http_get(url: str, contact: str, retries: int = 8, sleep: Callable = time.sleep) -> str:
+def http_get(url: str, contact: str, retries: int = 8, sleep: Callable = time.sleep, log: Callable = print) -> str:
     request = urllib.request.Request(url, headers={"User-Agent": f"arxiv-rag/1.0 (mailto:{contact})"})
     for attempt in range(retries):
         try:
@@ -20,12 +20,16 @@ def http_get(url: str, contact: str, retries: int = 8, sleep: Callable = time.sl
                 return r.read().decode("utf-8")
         except urllib.error.HTTPError as e:
             if e.code == 503 and attempt < retries - 1:
-                sleep(int(e.headers.get("Retry-After") or 30))
+                wait = int(e.headers.get("Retry-After") or 30)
+                log(f"arXiv meşgul (503, deneme {attempt + 1}/{retries}); {wait} sn sonra tekrar", flush=True)
+                sleep(wait)
                 continue
             raise
-        except (urllib.error.URLError, TimeoutError):
+        except (urllib.error.URLError, TimeoutError) as e:
             if attempt < retries - 1:
-                sleep(30)
+                wait = min(30 * 2**attempt, 300)
+                log(f"arXiv cevap vermedi (deneme {attempt + 1}/{retries}: {e}); {wait} sn sonra tekrar", flush=True)
+                sleep(wait)
                 continue
             raise
     raise RuntimeError("OAI-PMH sunucusuna ulaşılamadı")
@@ -85,16 +89,17 @@ def parse_record(record) -> Optional[dict]:
 
 
 def harvest(
-    start: str, until: str, contact: str, get: Callable = http_get, sleep: Callable = time.sleep
+    start: str, until: str, contact: str, get: Callable = http_get, sleep: Callable = time.sleep, log: Callable = print
 ) -> tuple[list[dict], int]:
     rows, skipped = {}, 0
-    for root in pages(start, until, contact, get, sleep):
+    for number, root in enumerate(pages(start, until, contact, get, sleep), start=1):
         for record in root.findall("oai:ListRecords/oai:record", NS):
             row = parse_record(record)
             if row is None:
                 skipped += 1
                 continue
             rows[row["id"]] = row
+        log(f"sayfa {number}: toplam {len(rows)} kayıt", flush=True)
     return list(rows.values()), skipped
 
 
