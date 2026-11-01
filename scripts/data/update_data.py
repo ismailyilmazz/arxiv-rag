@@ -18,6 +18,7 @@ from scripts.deploy import wait_live
 DATA_REPO = "ismailylmz283/arxiv-rag-data"
 SPACE_ID = "ismailylmz283/arxiv-rag"
 SPACE_URL = "https://ismailylmz283-arxiv-rag.hf.space"
+CPU_LIMIT = 30000
 
 
 def read_json(api, repo: str, name: str) -> Optional[dict]:
@@ -152,9 +153,24 @@ def run(
                 vectors = kaggle([r["id"] for r in rows], staging, model, workdir)
                 print(f"Kaggle GPU ile {len(vectors)} kayıt gömüldü", flush=True)
             except Exception as error:
-                print(f"Kaggle ile gömülemedi ({error}); CPU ile gömülüyor", flush=True)
+                print(f"Kaggle ile gömülemedi ({error})", flush=True)
                 vectors = None
+        if vectors is None and len(rows) > CPU_LIMIT:
+            print(
+                f"{len(rows)} kayıt CPU ile süre sınırı içinde gömülemez (sınır {CPU_LIMIT}); hiçbir şey yayımlanmadı, "
+                f"son başarılı tarih {state.get('until')} kaldı",
+                flush=True,
+            )
+            if staged:
+                api.create_commit(
+                    repo_id=repo,
+                    repo_type="dataset",
+                    operations=[CommitOperationDelete(staging)],
+                    commit_message=f"Geçici kayıtlar silindi {until}",
+                )
+            return 1
         if vectors is None:
+            print("CPU ile gömülüyor", flush=True)
             vectors = encode(rows, model)
         if len(vectors) != len(rows):
             print("gömme sayısı kayıt sayısını tutmuyor, hiçbir şey yayımlanmadı")

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from fastapi import APIRouter, FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from arxiv_rag import config
@@ -16,10 +16,13 @@ from arxiv_rag.api.settings import Settings
 from arxiv_rag.api.store import Store
 from arxiv_rag.api.worker import RESTART_MESSAGE, Worker
 from arxiv_rag.generation import document, gemini
+from arxiv_rag.generation.docx_export import to_docx
 from arxiv_rag.storage.arxiv_ids import abs_url
 from arxiv_rag.storage.db import connect
 from arxiv_rag.storage.deltas import read_summary
 from arxiv_rag.storage.tex import clean_authors, clean_tex
+
+DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 
 def default_pipeline(conn, settings: Settings):
@@ -295,6 +298,15 @@ def create_app(
     def download_document(job_id: str):
         return FileResponse(
             finished_document(job_id, 0), media_type="text/markdown; charset=utf-8", filename=f"arxiv-rag-{job_id}.md"
+        )
+
+    @api.get("/jobs/{job_id}/document.docx")
+    def download_docx(job_id: str):
+        markdown = Path(finished_document(job_id, 0)).read_text(encoding="utf-8")
+        return Response(
+            content=to_docx(markdown),
+            media_type=DOCX_TYPE,
+            headers={"Content-Disposition": f'attachment; filename="arxiv-rag-{job_id}.docx"'},
         )
 
     @api.get("/jobs/{job_id}/report")

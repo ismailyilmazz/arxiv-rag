@@ -77,10 +77,6 @@ class Store:
             fields["summary"] = json.dumps(fields["summary"])
         self._write(f"UPDATE jobs SET {', '.join(f'{k} = ?' for k in fields)} WHERE id = ?", (*fields.values(), job_id))
 
-    def next_queued(self, kind: str) -> Optional[dict]:
-        row = self._one("SELECT id FROM jobs WHERE kind = ? AND status = 'queued' ORDER BY created_at LIMIT 1", (kind,))
-        return self.get_job(row["id"]) if row else None
-
     def claim_next(self, kind: str) -> Optional[dict]:
         with self.lock:
             row = self.conn.execute(

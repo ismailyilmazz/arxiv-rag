@@ -475,9 +475,8 @@ def test_truncated_section_continues_once(monkeypatch):
         return ("First half of the", 10, "length") if len(calls) == 1 else ("sentence ends here [1].", 5, "stop")
 
     monkeypatch.setattr(llm, "complete", complete)
-    from arxiv_rag.generation import writer
 
-    text, tokens, truncated = writer._call("PROMPT", "m", 1000)
+    text, tokens, truncated = llm.complete_continued("PROMPT", "m", 1000)
     assert text == "First half of the sentence ends here [1]." and tokens == 15 and truncated is False
     assert "currently ends with:\nFirst half of the" in calls[1]
 
@@ -611,7 +610,7 @@ def test_english_documents_are_not_translated(tmp_path, monkeypatch):
 
 
 def test_tidy_section_removes_restarted_table_and_trailing_fragment():
-    from arxiv_rag.generation.writer import tidy_section
+    from arxiv_rag.generation.formatting import tidy_section
 
     broken = (
         "Intro [1].\n\n| Work | Year |\n|---|---|\n| A [1] | 2017 |\n\nDiscussion [2]. Half sentence "
@@ -875,7 +874,7 @@ def test_review_typed_seeds_and_deep_sources_never_move():
 
 
 def test_truncated_section_drops_partial_and_empty_table_rows():
-    from arxiv_rag.generation.writer import tidy_section
+    from arxiv_rag.generation.formatting import tidy_section
 
     table = "Text before [1].\n\n| Work | Year | Result |\n|---|---|---|\n| A [1] | 1999 | Good |\n"
     assert tidy_section(table + "| B [2] | 2003 | Partial res", truncated=True) == (table.strip(), True)
@@ -886,7 +885,7 @@ def test_truncated_section_drops_partial_and_empty_table_rows():
 
 
 def test_truncated_section_drops_partial_list_items_and_dangling_headings():
-    from arxiv_rag.generation.writer import tidy_section
+    from arxiv_rag.generation.formatting import tidy_section
 
     assert tidy_section("First point [1].\n\n- Second point is cut", truncated=True) == ("First point [1].", True)
     assert tidy_section("Done [2].\n\n### Next part", truncated=True) == ("Done [2].", True)
@@ -897,7 +896,7 @@ def test_truncated_section_drops_partial_list_items_and_dangling_headings():
 
 
 def test_repeated_heading_at_section_start_is_dropped():
-    from arxiv_rag.generation.writer import drop_repeated_heading
+    from arxiv_rag.generation.formatting import drop_repeated_heading
 
     names = ["Related Work: Entanglement‑Based QKD Security", "Entanglement-Based QKD Security"]
     text = "**Entanglement‑Based QKD Security**\n\nBody text [1]."
@@ -1037,7 +1036,7 @@ def test_document_sections_cut_by_groq_are_completed_by_gemini(tmp_path, monkeyp
     from arxiv_rag.generation import gemini, writer
 
     _fake_llm(monkeypatch)
-    original = writer._call
+    original = llm.complete_continued
 
     def cut(prompt, model, max_tokens):
         text, tokens, finish = original(prompt, model, max_tokens)
@@ -1046,7 +1045,7 @@ def test_document_sections_cut_by_groq_are_completed_by_gemini(tmp_path, monkeyp
         return text + " The section then stops in the middle of a", tokens, True
 
     rest = "It continues with a complete closing sentence that cites the first source properly and ends cleanly [1]."
-    monkeypatch.setattr(writer, "_call", cut)
+    monkeypatch.setattr(writer, "complete_continued", cut)
     monkeypatch.setattr(config, "GEMINI_API_KEY", "AQ.test")
     monkeypatch.setattr(gemini, "status", lambda force=False: {"enabled": True, "ok": True})
     monkeypatch.setattr(gemini, "complete", lambda prompt, **kw: (rest, 50, "stop"))

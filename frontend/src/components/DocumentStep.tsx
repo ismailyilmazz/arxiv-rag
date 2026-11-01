@@ -10,7 +10,10 @@ export function DocumentStep({ job, markdown }: { job: Job; markdown: string }) 
     <div className="result">
       <div className="result__bar">
         <p className="result__summary">{text.documentSummary(words, cited)}</p>
-        <a className="button" href={api.documentUrl(job.job_id)} download>
+        <a className="button" href={api.wordUrl(job.job_id)} download>
+          {text.downloadWord}
+        </a>
+        <a className="link" href={api.documentUrl(job.job_id)} download>
           {text.downloadMarkdown}
         </a>
         <a className="link" href={api.reportUrl(job.job_id)} download>

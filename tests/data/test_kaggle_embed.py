@@ -127,3 +127,13 @@ def test_embed_rows_writes_vectors_and_ids_in_order(tmp_path, monkeypatch):
     vectors, ids = np.load(tmp_path / "out" / "vectors.npy"), np.load(tmp_path / "out" / "ids.npy")
     assert vectors.dtype == np.float16 and vectors[:, 0].tolist() == [0, 1, 2] and vectors[0, 1] == 128
     assert ids.tolist() == ["2610.00000", "2610.00001", "2610.00002"]
+
+
+def test_failure_messages_keep_the_end_of_the_error_where_the_cause_is(tmp_path):
+    trace = "Traceback (most recent call last):\n" + "  File x\n" * 60 + "ModuleNotFoundError: No module named 'six'"
+
+    def run(cmd, **kw):
+        return SimpleNamespace(returncode=1, stdout="", stderr=trace)
+
+    with pytest.raises(kaggle_embed.KaggleFailed, match="No module named 'six'"):
+        go(tmp_path, run)

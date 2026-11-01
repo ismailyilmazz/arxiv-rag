@@ -117,3 +117,22 @@ def limit_kind(error: Exception) -> Optional[str]:
 def output_limit(error: Exception) -> Optional[int]:
     match = re.search(r"\(OTPM\): Limit (\d+)", str(error))
     return int(match.group(1)) if match else None
+
+
+TOKEN_BUDGET = 7600
+CONTINUE = (
+    "\n\nThe section you are writing currently ends with:\n{tail}\n\nContinue exactly from where it stops. "
+    "Do not repeat earlier text, do not start a new table and do not repeat headings. Finish the section "
+    "with complete sentences."
+)
+
+
+def complete_continued(prompt: str, model: str, max_tokens: int) -> tuple[str, int, bool]:
+    budget = max(400, min(max_tokens, TOKEN_BUDGET - len(prompt) // 3))
+    text, tokens, finish = complete(prompt, model=model, max_tokens=budget)
+    if finish == "length" and text.strip():
+        more_prompt = prompt + CONTINUE.format(tail=text[-1200:])
+        budget = max(400, min(max_tokens, TOKEN_BUDGET - len(more_prompt) // 3))
+        more, extra, finish = complete(more_prompt, model=model, max_tokens=budget)
+        text, tokens = text.rstrip() + " " + more.lstrip(), tokens + extra
+    return text, tokens, finish == "length"

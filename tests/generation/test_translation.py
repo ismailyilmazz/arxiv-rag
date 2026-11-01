@@ -1,6 +1,6 @@
 import pytest
 
-from arxiv_rag.generation import language, llm, writer
+from arxiv_rag.generation import formatting, language, llm, translation, writer
 
 EN = (
     "Hallucinations in large language models (LLMs) jeopardize the trustworthiness of automated text generation "
@@ -33,14 +33,14 @@ class Script:
 def test_good_translation_needs_one_call(monkeypatch):
     fake = Script(TR)
     monkeypatch.setattr(llm, "complete", fake)
-    text, tokens, truncated, attempts = writer.translate_section(EN, "survey", "tr", "m")
+    text, tokens, truncated, attempts = translation.translate_section(EN, "survey", "tr", "m")
     assert text == TR and attempts == 1 and tokens == 100 and not truncated
 
 
 def test_english_reply_is_retried_with_a_stricter_prompt(monkeypatch):
     fake = Script(EN, TR)
     monkeypatch.setattr(llm, "complete", fake)
-    text, tokens, _, attempts = writer.translate_section(EN, "survey", "tr", "m")
+    text, tokens, _, attempts = translation.translate_section(EN, "survey", "tr", "m")
     assert text == TR and attempts == 2 and tokens == 200
     assert fake.prompts[1].startswith("The previous translation attempt returned English")
 
@@ -48,7 +48,7 @@ def test_english_reply_is_retried_with_a_stricter_prompt(monkeypatch):
 def test_only_remaining_english_paragraphs_are_repaired(monkeypatch):
     fake = Script(f"{EN}\n\n{EN}", TR, TR)
     monkeypatch.setattr(llm, "complete", fake)
-    text, tokens, _, attempts = writer.translate_section(f"{EN}\n\n{EN}", "survey", "tr", "m")
+    text, tokens, _, attempts = translation.translate_section(f"{EN}\n\n{EN}", "survey", "tr", "m")
     assert attempts == 2 and tokens == 300 and language.english_share(text) == 0.0 and text.count(TR) == 2
 
 
@@ -61,14 +61,14 @@ TR5 = TR.replace("[1]", "[5]")
 def test_lossy_translation_falls_back_to_paragraphs(monkeypatch):
     fake = Script(TR, TR, TR4, TR5)
     monkeypatch.setattr(llm, "complete", fake)
-    text, tokens, _, attempts = writer.translate_section(f"{EN}\n\n{EN4}\n\n{EN5}", "survey", "tr", "m")
+    text, tokens, _, attempts = translation.translate_section(f"{EN}\n\n{EN4}\n\n{EN5}", "survey", "tr", "m")
     assert attempts == 2 and tokens == 400 and text == f"{TR}\n\n{TR4}\n\n{TR5}"
 
 
 def test_mixed_section_keeps_turkish_paragraphs_untouched(monkeypatch):
     fake = Script(TR)
     monkeypatch.setattr(llm, "complete", fake)
-    text, tokens, repaired, failed = writer.repair_paragraphs(f"{EN}\n\n{TR4}\n\n{TR5}", "tr", "m")
+    text, tokens, repaired, failed = translation.repair_paragraphs(f"{EN}\n\n{TR4}\n\n{TR5}", "tr", "m")
     assert len(fake.prompts) == 1 and EN in fake.prompts[0]
     assert text == f"{TR}\n\n{TR4}\n\n{TR5}" and (repaired, failed) == (1, 0)
 
@@ -79,26 +79,26 @@ LOST = "Bu Türkçe metin atıfı kaybetmiş ama uzunluğu yeterli görünüyor 
 def test_repair_that_drops_a_citation_twice_keeps_the_original(monkeypatch):
     fake = Script(LOST, LOST)
     monkeypatch.setattr(llm, "complete", fake)
-    text, tokens, repaired, failed = writer.repair_paragraphs(EN, "tr", "m")
+    text, tokens, repaired, failed = translation.repair_paragraphs(EN, "tr", "m")
     assert text == EN and (repaired, failed) == (0, 1) and tokens == 200
 
 
 def test_failed_repair_gets_one_more_chance(monkeypatch):
     fake = Script(LOST, TR)
     monkeypatch.setattr(llm, "complete", fake)
-    text, tokens, repaired, failed = writer.repair_paragraphs(EN, "tr", "m")
+    text, tokens, repaired, failed = translation.repair_paragraphs(EN, "tr", "m")
     assert text == TR and (repaired, failed) == (1, 0) and tokens == 200
 
 
 def test_completeness_needs_all_citations_and_enough_length():
-    assert writer.is_complete(TR, EN) and not writer.is_complete(TR, f"{EN} [2]")
-    assert not writer.is_complete("Kısa [1].", EN)
+    assert translation.is_complete(TR, EN) and not translation.is_complete(TR, f"{EN} [2]")
+    assert not translation.is_complete("Kısa [1].", EN)
 
 
 def test_english_target_is_not_checked(monkeypatch):
     fake = Script(EN)
     monkeypatch.setattr(llm, "complete", fake)
-    assert writer.translate_section(EN, "survey", "en", "m")[3] == 1
+    assert translation.translate_section(EN, "survey", "en", "m")[3] == 1
 
 
 @pytest.mark.parametrize(
@@ -110,24 +110,24 @@ def test_english_target_is_not_checked(monkeypatch):
     ],
 )
 def test_translator_notes_are_removed(note):
-    assert writer.strip_meta_notes(TR + note) == TR
+    assert formatting.strip_meta_notes(TR + note) == TR
 
 
 def test_ordinary_parentheses_survive():
     text = "Model (eksik veri ile eğitilmiş) iyi çalışır; çeviri (makine çevirisi) görevi zordur."
-    assert writer.strip_meta_notes(text) == text
+    assert formatting.strip_meta_notes(text) == text
 
 
 def test_theme_names_are_translated(monkeypatch):
     monkeypatch.setattr(llm, "complete", Script("Çeviriler:\n1. **Yöntemler**\n2. Benchmarklar"))
-    assert writer.translate_lines(["Methods", "Benchmarks"], "tr", "m") == (["Yöntemler", "Benchmarklar"], 100)
-    assert writer.translate_lines(["Methods"], "en", "m") == (["Methods"], 0)
+    assert translation.translate_lines(["Methods", "Benchmarks"], "tr", "m") == (["Yöntemler", "Benchmarklar"], 100)
+    assert translation.translate_lines(["Methods"], "en", "m") == (["Methods"], 0)
 
 
 def test_heading_count_mismatch_falls_back_to_one_by_one(monkeypatch):
     fake = Script("Yöntemler", "Yöntemler", "")
     monkeypatch.setattr(llm, "complete", fake)
-    names, tokens = writer.translate_lines(["Methods", "Benchmarks"], "tr", "m")
+    names, tokens = translation.translate_lines(["Methods", "Benchmarks"], "tr", "m")
     assert names == ["Yöntemler", "Benchmarks"] and tokens == 300 and len(fake.prompts) == 3
 
 
@@ -165,7 +165,7 @@ def test_english_headings_are_english(line):
 def test_english_table_left_by_the_translation_is_repaired(monkeypatch):
     fake = Script(f"{TR}\n\n{EN_TABLE}", TR_TABLE)
     monkeypatch.setattr(llm, "complete", fake)
-    text, tokens, _, attempts = writer.translate_section(f"{EN}\n\n{EN_TABLE}", "survey", "tr", "m")
+    text, tokens, _, attempts = translation.translate_section(f"{EN}\n\n{EN_TABLE}", "survey", "tr", "m")
     assert text == f"{TR}\n\n{TR_TABLE}" and attempts == 2 and tokens == 200
     assert (
         EN_TABLE.splitlines()[2] in fake.prompts[1] and "| Çalışma | Yıl | Ana fikir | Ana sonuç |" in fake.prompts[1]
@@ -174,7 +174,7 @@ def test_english_table_left_by_the_translation_is_repaired(monkeypatch):
 
 
 def test_translation_prompt_asks_for_table_cells():
-    prompt = writer.TRANSLATE_PROMPT.format(label="x", language="Turkish", text="t", glossary="", titles="")
+    prompt = translation.TRANSLATE_PROMPT.format(label="x", language="Turkish", text="t", glossary="", titles="")
     assert "table cells" in prompt and "unchanged" not in prompt
 
 
@@ -200,7 +200,7 @@ def test_glossary_is_built_once_and_used_in_every_translation(monkeypatch):
     fake = Script(TR, TR)
     monkeypatch.setattr(llm, "chat", chat)
     monkeypatch.setattr(llm, "complete", fake)
-    texts, rows, tokens, glossary = writer.translate_sections(
+    texts, rows, tokens, glossary = translation.translate_sections(
         SECTIONS, "survey", "tr", "m", {"Broad Surveys": "Genel Derlemeler"}
     )
     assert glossary == {"hallucinations": "halüsinasyonlar", "Broad Surveys": "Genel Derlemeler"}
@@ -214,14 +214,14 @@ def test_glossary_is_built_once_and_used_in_every_translation(monkeypatch):
 
 def test_failed_glossary_call_keeps_theme_names(monkeypatch):
     monkeypatch.setattr(llm, "chat", Chat(ValueError("bozuk JSON")))
-    glossary, tokens = writer.build_glossary([EN, EN], {"Methods": "Yöntemler", "BB84": "BB84"}, "x", "tr", "m")
+    glossary, tokens = translation.build_glossary([EN, EN], {"Methods": "Yöntemler", "BB84": "BB84"}, "x", "tr", "m")
     assert glossary == {"Methods": "Yöntemler"} and tokens == 0
 
 
 def test_heading_returned_unchanged_is_asked_again(monkeypatch):
     fake = Script("Broad Surveys of Methods", "Yöntemlere Genel Bakışlar")
     monkeypatch.setattr(llm, "complete", fake)
-    names, tokens = writer.translate_lines(["Broad Surveys of Methods"], "tr", "m")
+    names, tokens = translation.translate_lines(["Broad Surveys of Methods"], "tr", "m")
     assert names == ["Yöntemlere Genel Bakışlar"] and tokens == 200
     assert fake.prompts[1].startswith("Translate this heading")
 
@@ -230,7 +230,7 @@ def test_implausible_heading_reply_is_rejected(monkeypatch):
     monkeypatch.setattr(
         llm, "complete", Script("Methods", "Bu çalışmalar [1] ve [2] yöntemleri ayrıntılı biçimde inceler.")
     )
-    assert writer.translate_lines(["Methods"], "tr", "m")[0] == ["Methods"]
+    assert translation.translate_lines(["Methods"], "tr", "m")[0] == ["Methods"]
 
 
 def test_plan_names_are_used_and_only_missing_ones_are_translated(monkeypatch):
@@ -272,13 +272,13 @@ def test_bold_and_italic_titles_are_left_out_of_the_measurement():
 def test_translated_title_is_rejected_and_the_paragraph_is_repaired(monkeypatch):
     fake = Script(TR_BAD, TR_T)
     monkeypatch.setattr(llm, "complete", fake)
-    text, tokens, _, attempts = writer.translate_section(EN_T, "survey", "tr", "m", titles=[TITLE])
+    text, tokens, _, attempts = translation.translate_section(EN_T, "survey", "tr", "m", titles=[TITLE])
     assert text == TR_T and attempts == 2 and len(fake.prompts) == 2
 
 
 def test_repair_that_translates_a_title_keeps_the_original(monkeypatch):
     monkeypatch.setattr(llm, "complete", Script(TR_BAD, TR_BAD))
-    text, _, repaired, failed = writer.repair_paragraphs(EN_T, "tr", "m", titles=[TITLE])
+    text, _, repaired, failed = translation.repair_paragraphs(EN_T, "tr", "m", titles=[TITLE])
     assert text == EN_T and (repaired, failed) == (0, 1)
 
 
@@ -286,13 +286,13 @@ def test_generic_title_words_outside_bold_are_free_to_translate(monkeypatch):
     en = "Quantum cryptography protocols rely on the laws of physics and on the assumptions of the model [2]."
     tr = "Kuantum kriptografi protokolleri fizik yasalarına ve modelin varsayımlarına dayanır [2]."
     monkeypatch.setattr(llm, "complete", Script(tr))
-    assert writer.translate_section(en, "survey", "tr", "m", titles=["Quantum Cryptography"])[3] == 1
+    assert translation.translate_section(en, "survey", "tr", "m", titles=["Quantum Cryptography"])[3] == 1
 
 
 def test_theme_label_that_contains_a_short_title_is_not_protected():
     source = "*The second theme, Broad Surveys of Quantum Cryptography*, covers reviews [4]."
-    assert writer.protected_titles(source, ["Quantum Cryptography"]) == set()
-    assert writer.protected_titles(f"See **{TITLE}** [1].", [TITLE]) == {TITLE.lower()}
+    assert translation.protected_titles(source, ["Quantum Cryptography"]) == set()
+    assert translation.protected_titles(f"See **{TITLE}** [1].", [TITLE]) == {TITLE.lower()}
 
 
 def test_work_column_keeps_the_original_titles():
@@ -301,20 +301,20 @@ def test_work_column_keeps_the_original_titles():
         "| Çalışma | Yıl | Ana fikir |\n|---|---|---|\n"
         "| Dolanık Fotonlarla Kuantum Kriptografi [1] | 1999 | Serbest alanda dolanık fotonlar |"
     )
-    kept = writer.keep_work_column(translated, source)
+    kept = translation.keep_work_column(translated, source)
     assert kept.splitlines()[0] == "| Çalışma | Yıl | Ana fikir |"
     assert kept.splitlines()[2] == f"| {TITLE} [1] | 1999 | Serbest alanda dolanık fotonlar |"
     other = "| Dataset | Size |\n|---|---|\n| Long English cell | 10 |"
-    assert writer.keep_work_column("| Veri | Boyut |\n|---|---|\n| Uzun hücre | 10 |", other).endswith(
+    assert translation.keep_work_column("| Veri | Boyut |\n|---|---|\n| Uzun hücre | 10 |", other).endswith(
         "Uzun hücre | 10 |"
     )
 
 
 def test_translation_prompts_protect_titles():
-    prompt = writer.TRANSLATE_PROMPT.format(label="x", language="Turkish", text="t", glossary="", titles="")
-    retry = writer.RETRY_TRANSLATE_PROMPT.format(language="Turkish", text="t", glossary="", titles="")
+    prompt = translation.TRANSLATE_PROMPT.format(label="x", language="Turkish", text="t", glossary="", titles="")
+    retry = translation.RETRY_TRANSLATE_PROMPT.format(language="Turkish", text="t", glossary="", titles="")
     assert "Paper titles are never translated" in prompt and "Work column" in prompt and "Work column" in retry
-    assert writer.glossary_rule({"survey": "derleme"}).startswith("\n- Outside paper titles")
+    assert translation.glossary_rule({"survey": "derleme"}).startswith("\n- Outside paper titles")
 
 
 @pytest.mark.parametrize(
@@ -341,10 +341,10 @@ def test_names_with_english_words_are_translated_again(monkeypatch):
 
 def test_known_table_headers_are_localized_and_unknown_ones_are_measured():
     table = "| Work | Year | Key idea | Setting or scale | Main result |\n|---|---|---|---|---|\n| T [1] | 1999 | a | b | c |"
-    assert writer.localize_table_headers(table, "tr").splitlines()[0] == (
+    assert translation.localize_table_headers(table, "tr").splitlines()[0] == (
         "| Çalışma | Yıl | Ana fikir | Ortam ya da ölçek | Ana sonuç |"
     )
-    assert writer.localize_table_headers(table, "en") == table
+    assert translation.localize_table_headers(table, "en") == table
     odd = "| Dataset | Evaluation setting | Limitations |\n|---|---|---|\n| T [1] | Laboratuvar ölçeği | Küçük veri kümesi |"
     found = language.audit(odd)
     assert (found["english_tables"], found["english_lines"]) == (0, 1)
@@ -354,17 +354,17 @@ def test_glossary_adds_fixed_terms_and_caps_model_terms(monkeypatch):
     rows = [{"en": f"term number {i}", "target": f"terim {i}"} for i in range(40)]
     monkeypatch.setattr(llm, "chat", Chat({"terms": rows}))
     text = "This survey covers attacks [1]. Earlier surveys [2] and a proof-of-concept [3] exist. **A Survey Title**"
-    glossary, _ = writer.build_glossary([text, text], {}, "x", "tr", "m")
-    assert sum(k.startswith("term number") for k in glossary) == writer.GLOSSARY_LIMIT
+    glossary, _ = translation.build_glossary([text, text], {}, "x", "tr", "m")
+    assert sum(k.startswith("term number") for k in glossary) == translation.GLOSSARY_LIMIT
     assert glossary["survey"] == "derleme" and glossary["surveys"] == "derlemeler"
     assert glossary["proof-of-concept"] == "kavram kanıtı"
-    assert "survey" not in writer.build_glossary(["**A Survey Title** [1] is cited."], {}, "x", "tr", "m")[0]
+    assert "survey" not in translation.build_glossary(["**A Survey Title** [1] is cited."], {}, "x", "tr", "m")[0]
 
 
 def test_quoted_titles_are_protected_and_left_out_of_the_measurement():
     text = "Bu argüman, “Unconditionally secure quantum bit commitment is impossible” adlı çalışmaya dayanır [16]."
     title = "Unconditionally secure quantum bit commitment is impossible"
-    assert writer.protected_titles(text, [title]) == {title.lower()}
+    assert translation.protected_titles(text, [title]) == {title.lower()}
     assert language.term_audit(text, {"quantum": "kuantum"})["english_left"] == 0
 
 
@@ -381,9 +381,9 @@ HYPHEN_TITLE = "Strategic Roadmap for Quantum- Resistant Security: A Framework"
 
 def test_titles_are_listed_in_the_prompt_and_other_bold_text_must_be_translated():
     text = f"**{TITLE}** [1] and **privacy amplification** are discussed."
-    rule = writer.titles_rule(text, [TITLE, "Unrelated Paper Title Here"])
+    rule = translation.titles_rule(text, [TITLE, "Unrelated Paper Title Here"])
     assert TITLE in rule and "Unrelated" not in rule and "must be translated" in rule
-    assert "names no paper titles" in writer.titles_rule("Plain text [1].", [TITLE])
+    assert "names no paper titles" in translation.titles_rule("Plain text [1].", [TITLE])
 
 
 def test_english_labels_skip_titles_and_turkish_bold_text():
@@ -391,13 +391,16 @@ def test_english_labels_skip_titles_and_turkish_bold_text():
         f"**{TITLE}** [1], **Strategic Roadmap for Quantum‑Resistant Security: A Framework** [2], "
         "**gizli paylaşım** ve **privacy amplification** [3]."
     )
-    assert writer.english_labels(text, [TITLE, HYPHEN_TITLE]) == ["privacy amplification"]
+    assert translation.english_labels(text, [TITLE, HYPHEN_TITLE]) == ["privacy amplification"]
 
 
 def test_bold_theme_names_are_replaced_but_titles_are_not():
     names = {"Broad Surveys of Methods": "Yöntemlere Genel Bakış", TITLE: "Çevrilmemeli"}
     text = f"İlk tema, **Broad Surveys of Methods**, ve **{TITLE}** [1]."
-    assert writer.localize_labels(text, names, [TITLE]) == f"İlk tema, **Yöntemlere Genel Bakış**, ve **{TITLE}** [1]."
+    assert (
+        translation.localize_labels(text, names, [TITLE])
+        == f"İlk tema, **Yöntemlere Genel Bakış**, ve **{TITLE}** [1]."
+    )
 
 
 def test_english_bold_term_left_by_the_translation_is_repaired(monkeypatch):
@@ -406,7 +409,7 @@ def test_english_bold_term_left_by_the_translation_is_repaired(monkeypatch):
     fixed = "Gizlilik sınırı, **gizlilik artırımı** için her pratik protokolde çıkarılabilir anahtarı kısıtlar [3]."
     fake = Script(left, fixed)
     monkeypatch.setattr(llm, "complete", fake)
-    text, _, _, attempts = writer.translate_section(en, "survey", "tr", "m", titles=[TITLE])
+    text, _, _, attempts = translation.translate_section(en, "survey", "tr", "m", titles=[TITLE])
     assert text == fixed and attempts == 2 and "names no paper titles" in fake.prompts[1]
 
 
@@ -437,8 +440,8 @@ def _gemini_on(monkeypatch, reply):
 def test_gemini_repairs_first_and_groq_is_not_asked_again(monkeypatch):
     calls = _gemini_on(monkeypatch, (TR, 300, "stop"))
     monkeypatch.setattr(llm, "complete", Script(EN))
-    stats = writer.new_repair_stats()
-    text, tokens, _, attempts = writer.translate_section(EN, "survey", "tr", "m", stats=stats)
+    stats = translation.new_repair_stats()
+    text, tokens, _, attempts = translation.translate_section(EN, "survey", "tr", "m", stats=stats)
     assert text == TR and tokens == 100 and attempts == 2 and len(calls) == 1
     assert "every unit into Turkish" in calls[0] and "Unit 1:" in calls[0]
     assert stats == {"units": 1, "gemini_tried": 1, "gemini_ok": 1, "groq_tried": 0, "groq_ok": 0, "kept": 0}
@@ -449,8 +452,8 @@ def test_gemini_error_falls_back_to_groq(monkeypatch):
 
     _gemini_on(monkeypatch, gemini.GeminiUnavailable("HTTP 429"))
     monkeypatch.setattr(llm, "complete", Script(EN, TR))
-    stats = writer.new_repair_stats()
-    text, tokens, _, _ = writer.translate_section(EN, "survey", "tr", "m", stats=stats)
+    stats = translation.new_repair_stats()
+    text, tokens, _, _ = translation.translate_section(EN, "survey", "tr", "m", stats=stats)
     assert text == TR and tokens == 200
     assert (stats["gemini_tried"], stats["gemini_ok"], stats["groq_tried"], stats["groq_ok"]) == (1, 0, 1, 1)
 
@@ -458,16 +461,16 @@ def test_gemini_error_falls_back_to_groq(monkeypatch):
 def test_cut_off_gemini_reply_is_not_used(monkeypatch):
     _gemini_on(monkeypatch, (TR, 300, "length"))
     monkeypatch.setattr(llm, "complete", Script(EN, TR))
-    stats = writer.new_repair_stats()
-    assert writer.translate_section(EN, "survey", "tr", "m", stats=stats)[0] == TR
+    stats = translation.new_repair_stats()
+    assert translation.translate_section(EN, "survey", "tr", "m", stats=stats)[0] == TR
     assert (stats["gemini_ok"], stats["groq_ok"]) == (0, 1)
 
 
 def test_gemini_reply_must_pass_the_same_checks(monkeypatch):
     _gemini_on(monkeypatch, (TR_BAD, 300, "stop"))
     monkeypatch.setattr(llm, "complete", Script(EN_T, TR_BAD))
-    stats = writer.new_repair_stats()
-    text, _, _, _ = writer.translate_section(EN_T, "survey", "tr", "m", titles=[TITLE], stats=stats)
+    stats = translation.new_repair_stats()
+    text, _, _, _ = translation.translate_section(EN_T, "survey", "tr", "m", titles=[TITLE], stats=stats)
     assert text == EN_T and stats["kept"] == 1 and stats["gemini_ok"] == 0
 
 
@@ -475,7 +478,7 @@ def test_translate_sections_reports_repair_counts(monkeypatch):
     _gemini_on(monkeypatch, (TR, 300, "stop"))
     monkeypatch.setattr(llm, "chat", Chat({"terms": []}))
     monkeypatch.setattr(llm, "complete", Script(EN, TR))
-    _, rows, _, _ = writer.translate_sections(SECTIONS, "survey", "tr", "m", {})
+    _, rows, _, _ = translation.translate_sections(SECTIONS, "survey", "tr", "m", {})
     assert rows[-1]["section"] == "translate:repairs"
     assert (rows[-1]["units"], rows[-1]["gemini_ok"], rows[-1]["groq_tried"]) == (1, 1, 0)
 
@@ -486,8 +489,8 @@ def test_groq_repairs_alone_while_the_gemini_probe_is_failing(monkeypatch):
     calls = _gemini_on(monkeypatch, (TR, 300, "stop"))
     monkeypatch.setattr(gemini, "status", lambda force=False: {"enabled": True, "ok": False})
     monkeypatch.setattr(llm, "complete", Script(EN, TR))
-    stats = writer.new_repair_stats()
-    assert writer.translate_section(EN, "survey", "tr", "m", stats=stats)[0] == TR
+    stats = translation.new_repair_stats()
+    assert translation.translate_section(EN, "survey", "tr", "m", stats=stats)[0] == TR
     assert calls == [] and (stats["gemini_tried"], stats["groq_ok"]) == (0, 1)
 
 
@@ -496,11 +499,11 @@ def test_short_title_counts_only_when_a_citation_follows():
         "A central notion is **quantum entanglement**, a non-classical correlation. "
         "The review *Quantum entanglement* [4] covers it, as does **Quantum Cryptography** (2006) [6]."
     )
-    found = writer.protected_titles(text, ["Quantum entanglement", "Quantum Cryptography"])
+    found = translation.protected_titles(text, ["Quantum entanglement", "Quantum Cryptography"])
     assert found == {"quantum entanglement", "quantum cryptography"}
     alone = "A central notion is **quantum entanglement**, a non-classical correlation between particles."
-    assert writer.protected_titles(alone, ["Quantum entanglement"]) == set()
-    assert writer.protected_titles(f"We follow **{TITLE}** closely.", [TITLE]) == {TITLE.lower()}
+    assert translation.protected_titles(alone, ["Quantum entanglement"]) == set()
+    assert translation.protected_titles(f"We follow **{TITLE}** closely.", [TITLE]) == {TITLE.lower()}
 
 
 def test_bold_terms_lose_their_markup_but_titles_keep_it():
@@ -508,7 +511,7 @@ def test_bold_terms_lose_their_markup_but_titles_keep_it():
         "A central notion is **quantum entanglement**, used by *Quantum Cryptography with Entangled Photons* [2]; "
         "the theme **Broad Surveys** and “Quoted Phrase” remain."
     )
-    out = writer.unbold_labels(text, ["Quantum Cryptography with Entangled Photons", "Quantum entanglement"])
+    out = translation.unbold_labels(text, ["Quantum Cryptography with Entangled Photons", "Quantum entanglement"])
     assert "**quantum entanglement**" not in out and "quantum entanglement," in out
     assert "*Quantum Cryptography with Entangled Photons* [2]" in out
     assert "the theme Broad Surveys and" in out and "“Quoted Phrase”" in out
@@ -518,7 +521,7 @@ def test_correct_translation_of_a_bold_term_that_equals_a_short_title_is_accepte
     en = "A central notion is **quantum entanglement**, a non-classical correlation between particles [2]."
     tr = "Merkezi bir kavram **kuantum dolanıklık**, parçacıklar arasındaki klasik olmayan bir ilişkidir [2]."
     monkeypatch.setattr(llm, "complete", Script(tr))
-    text, _, _, attempts = writer.translate_section(en, "survey", "tr", "m", titles=["Quantum entanglement"])
+    text, _, _, attempts = translation.translate_section(en, "survey", "tr", "m", titles=["Quantum entanglement"])
     assert text == tr and attempts == 1
 
 
@@ -530,7 +533,7 @@ def test_theme_name_that_contradicts_the_glossary_is_translated_again(monkeypatc
     fake = Script("Dolanıklık Temelli Kuantum Anahtar Dağıtımı")
     monkeypatch.setattr(llm, "complete", fake)
     names, glossary = dict(DOLGU), dict(GLOSSARY)
-    tokens, fixed = writer.align_names(names, glossary, "tr", "m")
+    tokens, fixed = translation.align_names(names, glossary, "tr", "m")
     assert fixed == 1 and tokens == 100
     assert names["Entanglement‑Based Quantum Key Distribution"] == "Dolanıklık Temelli Kuantum Anahtar Dağıtımı"
     assert glossary["Entanglement‑Based Quantum Key Distribution"] == "Dolanıklık Temelli Kuantum Anahtar Dağıtımı"
@@ -541,9 +544,9 @@ def test_consistent_names_are_left_alone_and_a_bad_retry_is_rejected(monkeypatch
     fake = Script("Dolgu Temelli Dağıtım")
     monkeypatch.setattr(llm, "complete", fake)
     good = {"Entanglement‑Based QKD": "Dolanıklık Temelli QKD"}
-    assert writer.align_names(good, dict(GLOSSARY), "tr", "m") == (0, 0) and fake.prompts == []
+    assert translation.align_names(good, dict(GLOSSARY), "tr", "m") == (0, 0) and fake.prompts == []
     names = dict(DOLGU)
-    assert writer.align_names(names, dict(GLOSSARY), "tr", "m") == (100, 0) and names == DOLGU
+    assert translation.align_names(names, dict(GLOSSARY), "tr", "m") == (100, 0) and names == DOLGU
 
 
 def test_translate_sections_fixes_theme_names_in_place(monkeypatch):
@@ -551,7 +554,7 @@ def test_translate_sections_fixes_theme_names_in_place(monkeypatch):
     monkeypatch.setattr(llm, "complete", Script("Dolanıklık Yöntemleri", TR, TR))
     names = {"Entanglement Methods": "Dolgu Yöntemleri"}
     sections = [{**SECTIONS[0]}, {"key": "theme:Entanglement Methods", "heading": "x", "heading_out": "y", "text": EN}]
-    _, rows, _, glossary = writer.translate_sections(sections, "survey", "tr", "m", names)
+    _, rows, _, glossary = translation.translate_sections(sections, "survey", "tr", "m", names)
     assert names == {"Entanglement Methods": "Dolanıklık Yöntemleri"} and rows[0]["names_fixed"] == 1
     assert glossary["Entanglement Methods"] == "Dolanıklık Yöntemleri"
 
@@ -559,8 +562,10 @@ def test_translate_sections_fixes_theme_names_in_place(monkeypatch):
 def test_all_units_of_a_section_go_to_gemini_in_one_request(monkeypatch):
     calls = _gemini_on(monkeypatch, (TR, 300, "stop"))
     monkeypatch.setattr(llm, "complete", Script())
-    stats = writer.new_repair_stats()
-    text, tokens, repaired, failed = writer.repair_paragraphs(f"{EN}\n\n{TR}\n\n{EN}\n\n{EN}", "tr", "m", stats=stats)
+    stats = translation.new_repair_stats()
+    text, tokens, repaired, failed = translation.repair_paragraphs(
+        f"{EN}\n\n{TR}\n\n{EN}\n\n{EN}", "tr", "m", stats=stats
+    )
     assert len(calls) == 1 and calls[0].count("Unit ") == 3 and tokens == 0
     assert (repaired, failed) == (3, 0) and text == f"{TR}\n\n{TR}\n\n{TR}\n\n{TR}"
     assert (stats["units"], stats["gemini_tried"], stats["gemini_ok"], stats["groq_tried"]) == (3, 3, 3, 0)
@@ -572,37 +577,37 @@ def test_units_missing_from_the_batch_reply_fall_back_to_groq(monkeypatch):
     _gemini_on(monkeypatch, (TR, 0, "stop"))
     monkeypatch.setattr(gemini, "chat", lambda prompt, **kw: ({"units": [{"id": 1, "text": TR}]}, 10))
     monkeypatch.setattr(llm, "complete", Script(TR))
-    stats = writer.new_repair_stats()
-    text, _, repaired, _ = writer.repair_paragraphs(f"{EN}\n\n{EN}", "tr", "m", stats=stats)
+    stats = translation.new_repair_stats()
+    text, _, repaired, _ = translation.repair_paragraphs(f"{EN}\n\n{EN}", "tr", "m", stats=stats)
     assert text == f"{TR}\n\n{TR}" and repaired == 2
     assert (stats["gemini_ok"], stats["groq_tried"], stats["groq_ok"]) == (1, 1, 1)
 
 
 def test_wide_bracket_citations_become_standard_citations():
     text = "Hallucinations erode trust【1】 and harm users【2】【4】; see also【3, 5】 and【6†source】 and［7］."
-    assert writer.normalize_citations(text) == (
+    assert formatting.normalize_citations(text) == (
         "Hallucinations erode trust[1] and harm users[2][4]; see also[3, 5] and[6] and[7]."
     )
-    out, _ = writer.tidy_section("Background text cites【1】 and【2，3】 properly.")
+    out, _ = formatting.tidy_section("Background text cites【1】 and【2，3】 properly.")
     assert out == "Background text cites[1] and[2, 3] properly."
-    assert writer.normalize_citations("Plain [1] text 【note】 stays.") == "Plain [1] text 【note】 stays."
+    assert formatting.normalize_citations("Plain [1] text 【note】 stays.") == "Plain [1] text 【note】 stays."
 
 
 def test_short_first_words_and_hyphens_do_not_hide_a_wrong_theme_name():
     glossary = {"bit commitment": "bit taahhüdü", "entanglement based": "dolanıklık tabanlı"}
     english = "Impossibility of Secure Quantum Bit Commitment"
-    assert writer.misaligned(english, "Güvenli Kuantum Bit Bağlantısının İmkânsızlığı", glossary)
-    assert not writer.misaligned(english, "Güvenli Kuantum Bit Taahhüdünün İmkânsızlığı", glossary)
-    assert writer.misaligned("Entanglement‑Based QKD", "Dolgu Tabanlı QKD", glossary)
+    assert translation.misaligned(english, "Güvenli Kuantum Bit Bağlantısının İmkânsızlığı", glossary)
+    assert not translation.misaligned(english, "Güvenli Kuantum Bit Taahhüdünün İmkânsızlığı", glossary)
+    assert translation.misaligned("Entanglement‑Based QKD", "Dolgu Tabanlı QKD", glossary)
 
 
 def test_english_glossary_terms_left_in_prose_are_found_but_titles_are_not():
     glossary = {"entanglement": "dolanıklık", "survey": "derleme"}
     title = "Quantum cryptography with and without entanglement"
-    assert writer.glossary_left("Güvenliğin entanglement'ın kavramsal temeline dayandığı görülür [2].", glossary)
-    assert writer.glossary_left("Bu kapsamlı anket değil survey [25] konuyu özetler.", glossary)
-    assert not writer.glossary_left(f"{title} [1] çalışması dolanıklığı inceler.", glossary, [title])
-    assert not writer.glossary_left(
+    assert translation.glossary_left("Güvenliğin entanglement'ın kavramsal temeline dayandığı görülür [2].", glossary)
+    assert translation.glossary_left("Bu kapsamlı anket değil survey [25] konuyu özetler.", glossary)
+    assert not translation.glossary_left(f"{title} [1] çalışması dolanıklığı inceler.", glossary, [title])
+    assert not translation.glossary_left(
         "**Private Entanglement over Arbitrary Channels** [4] dolanıklığı inceler.", glossary
     )
 
@@ -611,8 +616,8 @@ def test_paragraph_with_a_leftover_glossary_term_is_repaired(monkeypatch):
     left = TR.replace("halüsinasyonlar", "hallucinations")
     calls = _gemini_on(monkeypatch, (TR, 50, "stop"))
     monkeypatch.setattr(llm, "complete", Script(left))
-    stats = writer.new_repair_stats()
-    out = writer.translate_section(EN, "survey", "tr", "m", {"hallucinations": "halüsinasyonlar"}, stats=stats)
+    stats = translation.new_repair_stats()
+    out = translation.translate_section(EN, "survey", "tr", "m", {"hallucinations": "halüsinasyonlar"}, stats=stats)
     assert out[0] == TR and len(calls) == 1 and stats["gemini_ok"] == 1
 
 
@@ -620,17 +625,17 @@ def test_repair_that_keeps_the_english_term_is_rejected(monkeypatch):
     left = TR.replace("halüsinasyonlar", "hallucinations")
     _gemini_on(monkeypatch, (left, 50, "stop"))
     monkeypatch.setattr(llm, "complete", Script(left, left))
-    stats = writer.new_repair_stats()
-    out = writer.translate_section(EN, "survey", "tr", "m", {"hallucinations": "halüsinasyonlar"}, stats=stats)
+    stats = translation.new_repair_stats()
+    out = translation.translate_section(EN, "survey", "tr", "m", {"hallucinations": "halüsinasyonlar"}, stats=stats)
     assert out[0] == left and stats["kept"] == 1
 
 
 def test_singular_and_plural_forms_of_a_glossary_term_match():
     glossary = {"gravitational waves": "kütleçekim dalgaları"}
     english = "Foundations of Gravitational-Wave Astronomy"
-    assert writer.misaligned(english, "Gravitasyon Dalga Astronomisinin Temelleri", glossary)
-    assert not writer.misaligned(english, "Kütleçekim Dalgası Astronomisinin Temelleri", glossary)
-    assert writer.glossary_left("Bu gravitational wave sinyali iki dedektörde görülür [2].", glossary)
+    assert translation.misaligned(english, "Gravitasyon Dalga Astronomisinin Temelleri", glossary)
+    assert not translation.misaligned(english, "Kütleçekim Dalgası Astronomisinin Temelleri", glossary)
+    assert translation.glossary_left("Bu gravitational wave sinyali iki dedektörde görülür [2].", glossary)
 
 
 CUT = (
@@ -689,14 +694,14 @@ def test_without_gemini_the_old_trimming_stays(monkeypatch):
 
     _gemini_continues(monkeypatch, gemini.GeminiUnavailable("HTTP 429"))
     assert writer.complete_section("TASK", CUT, 5) == (CUT, False, True)
-    assert writer.tidy_section(CUT, True)[0].endswith("limit the key rate [2].")
+    assert formatting.tidy_section(CUT, True)[0].endswith("limit the key rate [2].")
 
 
 def test_continuation_that_is_itself_cut_keeps_the_trimming_flag(monkeypatch):
     _gemini_continues(monkeypatch, (REST + " Third, the field still lacks", 900, "length"))
     text, completed, truncated = writer.complete_section("TASK", CUT, 5)
     assert completed and truncated
-    assert writer.tidy_section(text, truncated)[0].endswith("hold across all surveyed models [4].")
+    assert formatting.tidy_section(text, truncated)[0].endswith("hold across all surveyed models [4].")
 
 
 def test_cut_table_is_continued_on_the_next_row(monkeypatch):

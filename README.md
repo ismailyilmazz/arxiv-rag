@@ -4,11 +4,12 @@
 
 Bir konu yazarsın (Türkçe ya da İngilizce). Sistem 3,18 milyon arXiv makalesi içinde anlamsal arama, BM25, öğrenen
 sıralayıcı ve bekçi modeliyle ilgili makaleleri bulur; 30 kaynaklık bir plan çıkarır, sen onaylarsın, sonra seçtiğin
-türde (literatür taraması, araştırma önerisi, sentez raporu) her iddiası kaynağına bağlı bir metin yazılır.
+türde (literatür taraması, araştırma önerisi, sentez raporu) her iddiası kaynağına bağlı bir metin yazılır. Metin Word ya da
+Markdown olarak indirilebilir.
 
 ## Kurulum
 
-Gerekenler: Python 3.11 ya da üstü, Node.js LTS.
+Gerekenler: Python 3.11 ya da üstü, Node.js 22.23.4 ya da üstü (22.x).
 
 ```
 python -m venv venv
@@ -79,7 +80,9 @@ alanında görünür.
 
 - `CI`: her push ve pull request'te, ayrıca her pazartesi; Python 3.11/3.12 testleri, lint ve arayüz.
 - `Deploy`: `main`'de CI geçince Space'e yükler ve `/api/health`'te yeni commit'i bekler.
-- `Smoke`: her pazartesi canlı siteyi yoklar ve LLM kotası harcamayan İngilizce bir arama yapar.
+- `Smoke`: her pazartesi canlı siteyi yoklar ve LLM kotası harcamayan İngilizce aramalarla kaliteyi ölçer:
+  `eval/queries.jsonl`'den sabit 30'ar sorguda title/en ve synthetic/en hit@10 ile konu dışı sorguların kabul oranı.
+  Eşiğin altında iş kırmızı biter; modeller kendiliğinden yeniden eğitilmez.
 - `Data update`: her pazar arXiv OAI-PMH'den (`https://oaipmh.arxiv.org/oai`) yeni ve güncellenen kayıtları çeker, gömer ve
   veri deposuna delta olarak yayımlar; Space açılışta delta'ları uygular. Çekme ya da kalite kontrolü başarısız olursa
   hiçbir şey yayımlanmaz ve son başarılı tarih ilerlemez. Bozuk bir delta Space'i durdurmaz, atlanır ve `/api/health`

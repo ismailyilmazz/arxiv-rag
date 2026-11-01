@@ -1,11 +1,13 @@
+import io
 import json
 import sqlite3
 import threading
 import time
 
+from docx import Document
 from fastapi.testclient import TestClient
 
-from arxiv_rag.api.app import create_app
+from arxiv_rag.api.app import DOCX_TYPE, create_app
 from arxiv_rag.api.settings import Settings
 from arxiv_rag.api.store import Store
 from arxiv_rag.api.worker import RESTART_MESSAGE
@@ -145,6 +147,10 @@ def test_plan_then_document_flow(tmp_path):
     assert runner.calls == [("mixture of experts", [IDS[2]])]
     download = client.get(f"/api/jobs/{doc_id}/document")
     assert download.text.startswith("# Başlık") and "attachment" in download.headers["content-disposition"]
+    word = client.get(f"/api/jobs/{doc_id}/document.docx")
+    assert word.status_code == 200 and word.content[:2] == b"PK" and word.headers["content-type"] == DOCX_TYPE
+    assert ".docx" in word.headers["content-disposition"]
+    assert Document(io.BytesIO(word.content)).paragraphs[0].text.startswith("Başlık")
     assert client.get(f"/api/jobs/{doc_id}/report").json()["removed_ids"] == [IDS[2]]
     assert client.get(f"/api/jobs/{job_id}/document").status_code == 404
 

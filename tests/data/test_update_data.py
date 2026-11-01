@@ -193,3 +193,29 @@ def test_dry_run_with_kaggle_removes_the_staging_file_and_publishes_nothing_else
         [("CommitOperationAdd", "staging/2026-10-27/papers.parquet")],
         [("CommitOperationDelete", "staging/2026-10-27/papers.parquet")],
     ]
+
+
+def test_a_large_backfill_stops_early_instead_of_running_for_hours_on_cpu(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(update_data, "CPU_LIMIT", 1)
+    api, cpu = Api(), []
+
+    def kaggle(ids, staging, model, workdir):
+        raise RuntimeError("No module named 'six'")
+
+    code = update_data.run(
+        api,
+        "me@x.org",
+        read=reader({"until": "2026-10-26"}),
+        encode=lambda rows, m: cpu.append(1) or np.ones((len(rows), 4)),
+        get=lambda u, c: page([record("2610.00001"), record("2610.00002")]),
+        idle=lambda url: (True, "boş"),
+        workdir=tmp_path,
+        until="2026-10-27",
+        kaggle=kaggle,
+    )
+    out = capsys.readouterr().out
+    assert code == 1 and cpu == [] and "süre sınırı içinde gömülemez" in out and "No module named 'six'" in out
+    assert [_paths(c) for c in api.commits] == [
+        [("CommitOperationAdd", "staging/2026-10-27/papers.parquet")],
+        [("CommitOperationDelete", "staging/2026-10-27/papers.parquet")],
+    ]

@@ -46,6 +46,7 @@ export const api = {
     }),
   getJob: (jobId: string) => request<Job>(`/jobs/${jobId}`),
   documentUrl: (jobId: string) => `/api/jobs/${jobId}/document`,
+  wordUrl: (jobId: string) => `/api/jobs/${jobId}/document.docx`,
   reportUrl: (jobId: string) => `/api/jobs/${jobId}/report`,
   async documentText(jobId: string): Promise<string> {
     const response = await fetch(api.documentUrl(jobId));

@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 
 from arxiv_rag import config
-from arxiv_rag.generation import language, writer
+from arxiv_rag.generation import formatting, language, translation, writer
 
 
 def retranslate(report: dict, model: str) -> tuple[str, dict]:
@@ -19,10 +19,10 @@ def retranslate(report: dict, model: str) -> tuple[str, dict]:
     sections = []
     for s in draft["sections"]:
         theme = s["key"][6:] if s["key"].startswith("theme:") else None
-        text, _ = writer.drop_repeated_heading(s["text"], [s["heading"], theme])
-        text = writer.unbold_labels(text, draft.get("titles") or [])
+        text, _ = formatting.drop_repeated_heading(s["text"], [s["heading"], theme])
+        text = translation.unbold_labels(text, draft.get("titles") or [])
         sections.append({**s, "text": text, "heading_out": prefix + names[theme] if theme else s["heading_out"]})
-    texts, rows, tokens, glossary = writer.translate_sections(
+    texts, rows, tokens, glossary = translation.translate_sections(
         sections, draft["label"], lang, model, names, titles=draft.get("titles") or []
     )
     for s in sections:
@@ -32,7 +32,7 @@ def retranslate(report: dict, model: str) -> tuple[str, dict]:
     summary = {
         "tokens": tokens + heading_tokens,
         "headings": {
-            "translated": sum(not writer.same_text(local, en) for en, local in names.items()),
+            "translated": sum(not translation.same_text(local, en) for en, local in names.items()),
             "of": len(names),
             "from_plan": from_plan,
         },
@@ -41,7 +41,7 @@ def retranslate(report: dict, model: str) -> tuple[str, dict]:
         "language": language.audit(body),
         "terms": language.term_audit(body, glossary),
     }
-    labels = writer.english_labels(body, draft.get("titles") or [])
+    labels = translation.english_labels(body, draft.get("titles") or [])
     summary["language"].update(english_labels=len(labels), label_examples=[t[:80] for t in labels[:5]])
     title = writer.clean_title(draft.get("title", ""), report.get("topic", ""))
     return f"# {title}\n\n{body}\n", summary

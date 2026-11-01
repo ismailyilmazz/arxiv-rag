@@ -12,7 +12,7 @@ from sklearn.metrics import silhouette_score
 
 from arxiv_rag import config
 from arxiv_rag.evaluation import coverage
-from arxiv_rag.generation import cards, citations, gemini, language, llm, scholar, writer
+from arxiv_rag.generation import cards, citations, gemini, language, llm, scholar, translation, writer
 from arxiv_rag.search import bm25
 from arxiv_rag.search.related import related
 from arxiv_rag.storage.arxiv_ids import normalize_id
@@ -317,7 +317,7 @@ def name_themes(
     prompt = THEME_PROMPT.format(
         topic=topic,
         clusters=clusters,
-        local_rule=LOCAL_RULE.format(language=writer.LANGUAGES[lang]) if local else "",
+        local_rule=LOCAL_RULE.format(language=language.LANGUAGES[lang]) if local else "",
         local_field=LOCAL_FIELD if local else "",
     )
     data, tokens = llm.chat(prompt, model=model, max_tokens=1600 if local else 1200)
@@ -675,7 +675,7 @@ def write_from_selection(
     report["number_audit"] = citations.number_audit(body, {s["n"]: material_text(s) for s in cited})
     if lang != "en":
         report["language"] = language.audit(body)
-        labels = writer.english_labels(body, draft["titles"])
+        labels = translation.english_labels(body, draft["titles"])
         report["language"].update(english_labels=len(labels), label_examples=[t[:80] for t in labels[:5]])
         report["terms"] = language.term_audit(body, draft["glossary"])
     markdown = (

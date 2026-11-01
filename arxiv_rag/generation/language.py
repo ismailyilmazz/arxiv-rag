@@ -1,5 +1,6 @@
 import re
 
+LANGUAGES = {"en": "English", "tr": "Turkish"}
 TR_CHARS = set("çğıöşüÇĞİÖŞÜ")
 TR_WORDS = {
     "ve",

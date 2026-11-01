@@ -71,6 +71,7 @@ export const text = {
   queued: (position: number) => `Sırada, önünde ${position - 1} iş var`,
   waiting: "Başlatılıyor",
   documentSummary: (words: number, cited: number) => `${words} kelime, ${cited} atıflı kaynak`,
+  downloadWord: "Word olarak indir",
   downloadMarkdown: "Markdown olarak indir",
   downloadReport: "Üretim raporunu indir",
   newTopic: "Yeni konu",

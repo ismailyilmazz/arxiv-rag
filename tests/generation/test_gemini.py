@@ -5,7 +5,7 @@ import urllib.error
 import pytest
 
 from arxiv_rag import config
-from arxiv_rag.generation import gemini
+from arxiv_rag.generation import gemini, translation
 
 
 class Reply:
@@ -161,14 +161,12 @@ def test_failed_probe_is_retried_after_a_while(monkeypatch):
 
 
 def test_a_timeout_trips_the_breaker_so_repairs_skip_gemini(monkeypatch):
-    from arxiv_rag.generation import writer
-
     seen = fake_urlopen(monkeypatch, TimeoutError("read timed out"))
     with pytest.raises(gemini.GeminiUnavailable):
         gemini.complete("x", model="m", auth="bearer")
     info = gemini.status()
     assert info["ok"] is False and info["errors"]["runtime"] == "TimeoutError" and len(seen) == 1
-    assert writer._repair_engines() == ("groq", "groq")
+    assert translation._repair_engines() == ("groq", "groq")
 
 
 def test_rate_limit_after_retries_also_trips_the_breaker(monkeypatch):

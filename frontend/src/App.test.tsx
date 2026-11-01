@@ -109,6 +109,7 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: text.toasts.goDocument })).toBeInTheDocument();
     expect(screen.getByText(text.documentSummary(1234, 2))).toBeInTheDocument();
     expect(screen.getByRole("link", { name: text.downloadMarkdown })).toHaveAttribute("href", "/api/jobs/doc-job/document");
+    expect(screen.getByRole("link", { name: text.downloadWord })).toHaveAttribute("href", "/api/jobs/doc-job/document.docx");
     expect(server.calls.find((c) => c.url === "/api/documents")?.body).toEqual({
       plan_id: "p1", removed_ids: ["1701.06538"],
     });

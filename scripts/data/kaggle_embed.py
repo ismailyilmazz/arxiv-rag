@@ -57,6 +57,10 @@ def kernel_files(kid: str, sha: str, data_repo: str, staging: str, model: str, p
     return {"embed.py": script, "kernel-metadata.json": json.dumps(meta, indent=2)}
 
 
+def tail(text: str, size: int = 500) -> str:
+    return " | ".join((text or "").strip().splitlines())[-size:]
+
+
 def status_of(text: str) -> str:
     lowered = text.lower()
     for state in ("complete", "error", "cancel", "running", "queued"):
@@ -92,10 +96,10 @@ def embed_on_kaggle(
     push = ["kaggle", "kernels", "push", "-p", str(push_dir)]
     result = run(push + ["--accelerator", ACCELERATOR], capture_output=True, text=True)
     if result.returncode != 0:
-        log(f"Kaggle: hızlandırıcı seçilemedi, varsayılan GPU ile deneniyor ({(result.stderr or '').strip()[:200]})")
+        log(f"Kaggle: hızlandırıcı seçilemedi, varsayılan GPU ile deneniyor ({tail(result.stderr)})")
         result = run(push, capture_output=True, text=True)
     if result.returncode != 0:
-        raise KaggleFailed(f"push başarısız: {(result.stderr or result.stdout or '').strip()[:300]}")
+        raise KaggleFailed(f"push başarısız: {tail(result.stderr or result.stdout)}")
     log(f"Kaggle: {kid} başlatıldı", flush=True)
     deadline, state = clock() + timeout, "queued"
     while True:
