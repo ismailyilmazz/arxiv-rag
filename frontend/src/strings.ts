@@ -72,6 +72,10 @@ export const text = {
   waiting: "Başlatılıyor",
   documentSummary: (words: number, cited: number) => `${words} kelime, ${cited} atıflı kaynak`,
   downloadWord: "Word olarak indir",
+  offline: "Bağlantı koptu. İş sunucuda devam ediyor; bağlantı gelince kaldığı yerden gösterilecek.",
+  cachedNotice: (date: string) =>
+    `Bu belge ${date} tarihinde aynı istek için üretildi ve plan beklemeden gösteriliyor. Belgeler 30 günden eski olunca yeniden üretilir.`,
+  regenerate: "Yeniden üret",
   downloadMarkdown: "Markdown olarak indir",
   downloadReport: "Üretim raporunu indir",
   newTopic: "Yeni konu",
@@ -82,6 +86,7 @@ export const text = {
     found: (count: number) => `${count} makale bulundu. Plan oluşturmak için sonuçlara in.`,
     goResults: "Sonuçlara git",
     planAccepted: "Plan isteği alındı. Kaynaklar seçiliyor.",
+    cachedDocument: "Bu istek için yakın zamanda üretilmiş bir belge bulundu, hemen gösteriliyor.",
     planReady: "Plan hazır.",
     goPlan: "Plana git",
     documentAccepted: "Belge isteği alındı. Yazım başladı.",
@@ -93,5 +98,6 @@ export const text = {
     network: "Sunucuya ulaşılamadı. Bağlantını kontrol edip tekrar dene.",
     invalid: "Girdi kabul edilmedi. Konuyu kontrol edip tekrar dene.",
     unknown: "Beklenmeyen bir hata oluştu. Tekrar dene.",
+    jobLost: "Bu iş artık sunucuda yok; site yeniden başlamış olabilir. Yeni konuyla tekrar başlayabilirsin.",
   },
 };

@@ -28,11 +28,18 @@ export interface PlanRequest {
   seeds: string[];
   focus: string | null;
   force: boolean;
+  fresh?: boolean;
+}
+
+export interface CachedDocument {
+  job_id: string;
+  created_at: number;
 }
 
 export interface JobCreated {
-  job_id: string;
+  job_id: string | null;
   position: number;
+  cached?: CachedDocument;
 }
 
 export interface Job {

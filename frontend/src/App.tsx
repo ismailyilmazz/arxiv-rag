@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { api, messageOf } from "./api/client";
-import type { Plan, PlanRequest } from "./api/types";
+import { api, isTransient, messageOf } from "./api/client";
+import type { CachedDocument, Plan, PlanRequest } from "./api/types";
+import { armChime, playChime } from "./chime";
 import { DocumentStep } from "./components/DocumentStep";
 import { JobStatus } from "./components/JobStatus";
 import { PlanStep } from "./components/PlanStep";
@@ -39,12 +40,35 @@ function Progress({ current, finished }: { current: number; finished: boolean })
   );
 }
 
+const SAVED_JOBS = "arxiv-rag:jobs";
+
+type SavedJobs = { planJobId: string | null; docJobId: string | null; cached: (CachedDocument & { request: PlanRequest }) | null };
+
+function loadJobs(): SavedJobs | null {
+  try {
+    return JSON.parse(window.localStorage.getItem(SAVED_JOBS) ?? "null") as SavedJobs | null;
+  } catch {
+    return null;
+  }
+}
+
+function saveJobs(jobs: SavedJobs) {
+  try {
+    if (jobs.planJobId || jobs.docJobId) window.localStorage.setItem(SAVED_JOBS, JSON.stringify(jobs));
+    else window.localStorage.removeItem(SAVED_JOBS);
+  } catch {
+    return;
+  }
+}
+
 export function App({ pollMs = 1500 }: { pollMs?: number }) {
+  const [saved] = useState(loadJobs);
   const [round, setRound] = useState(0);
-  const [planJobId, setPlanJobId] = useState<string | null>(null);
+  const [planJobId, setPlanJobId] = useState<string | null>(saved?.planJobId ?? null);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [removed, setRemoved] = useState<string[]>([]);
-  const [docJobId, setDocJobId] = useState<string | null>(null);
+  const [docJobId, setDocJobId] = useState<string | null>(saved?.docJobId ?? null);
+  const [cached, setCached] = useState<(CachedDocument & { request: PlanRequest }) | null>(saved?.cached ?? null);
   const [markdown, setMarkdown] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -53,6 +77,18 @@ export function App({ pollMs = 1500 }: { pollMs?: number }) {
   const planJob = useJob(planJobId, pollMs);
   const docJob = useJob(docJobId, pollMs);
   const busy = planJob.active || docJob.active;
+  const planStatus = planJob.job?.status;
+
+  useEffect(() => saveJobs({ planJobId, docJobId, cached }), [planJobId, docJobId, cached]);
+  const docStatus = docJob.job?.status;
+
+  useEffect(() => {
+    if (planStatus === "done" || planStatus === "failed") playChime(planStatus);
+  }, [planStatus]);
+
+  useEffect(() => {
+    if (docStatus === "done" || docStatus === "failed") playChime(docStatus);
+  }, [docStatus]);
 
   const notify = useCallback((group: Toast["group"], message: string, action?: Toast["action"]) => {
     lastToast.current += 1;
@@ -76,14 +112,29 @@ export function App({ pollMs = 1500 }: { pollMs?: number }) {
   const finishedDocument = docJob.job?.status === "done" ? docJob.job.job_id : null;
   useEffect(() => {
     if (!finishedDocument) return;
-    api
-      .documentText(finishedDocument)
-      .then((loaded) => {
-        setMarkdown(loaded);
-        notify("document", text.toasts.documentReady, { label: text.toasts.goDocument, target: "step-document" });
-      })
-      .catch((e) => setError(messageOf(e)));
-  }, [finishedDocument, notify]);
+    let cancelled = false;
+    let failures = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const load = () =>
+      api
+        .documentText(finishedDocument)
+        .then((loaded) => {
+          if (cancelled) return;
+          setMarkdown(loaded);
+          notify("document", text.toasts.documentReady, { label: text.toasts.goDocument, target: "step-document" });
+        })
+        .catch((e) => {
+          if (cancelled) return;
+          if (!isTransient(e)) return setError(messageOf(e));
+          failures += 1;
+          timer = setTimeout(load, Math.min(pollMs * 2 ** failures, 30000));
+        });
+    void load();
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [finishedDocument, notify, pollMs]);
 
   const found = useCallback(
     (count: number) => notify("search", text.toasts.found(count), { label: text.toasts.goResults, target: "results" }),
@@ -95,6 +146,7 @@ export function App({ pollMs = 1500 }: { pollMs?: number }) {
     setPlan(null);
     setRemoved([]);
     setDocJobId(null);
+    setCached(null);
     setMarkdown(null);
     setError(null);
   };
@@ -111,10 +163,18 @@ export function App({ pollMs = 1500 }: { pollMs?: number }) {
 
   const startPlan = (request: PlanRequest) =>
     once(async () => {
+      armChime();
       clearJobs();
       try {
-        setPlanJobId((await api.createPlan(request)).job_id);
-        notify("plan", text.toasts.planAccepted);
+        const created = await api.createPlan(request);
+        if (created.cached) {
+          setCached({ ...created.cached, request });
+          setDocJobId(created.cached.job_id);
+          notify("document", text.toasts.cachedDocument);
+        } else {
+          setPlanJobId(created.job_id);
+          notify("plan", text.toasts.planAccepted);
+        }
       } catch (e) {
         setError(messageOf(e));
       }
@@ -123,6 +183,7 @@ export function App({ pollMs = 1500 }: { pollMs?: number }) {
   const write = () =>
     once(async () => {
       if (!plan) return;
+      armChime();
       setError(null);
       setMarkdown(null);
       try {
@@ -149,7 +210,7 @@ export function App({ pollMs = 1500 }: { pollMs?: number }) {
       <header className="masthead">
         <p className="masthead__name">{text.title}</p>
         <Progress current={current} finished={markdown !== null} />
-        {planJobId && (
+        {(planJobId || cached) && (
           <button className="link masthead__reset" type="button" onClick={whenIdle(reset)}>
             {text.newTopic}
           </button>
@@ -161,7 +222,7 @@ export function App({ pollMs = 1500 }: { pollMs?: number }) {
             <h2 className="step__title">{text.steps.topic}</h2>
             <TopicStep
               key={round}
-              locked={planJobId !== null}
+              locked={planJobId !== null || cached !== null}
               onFound={found}
               onPlan={startPlan}
               onEdit={whenIdle(clearJobs)}
@@ -170,7 +231,7 @@ export function App({ pollMs = 1500 }: { pollMs?: number }) {
           {planJobId && (
             <li className="step">
               <StepTitle id="step-plan">{text.steps.plan}</StepTitle>
-              <JobStatus job={planJob.job} error={planJob.error} />
+              <JobStatus job={planJob.job} error={planJob.error} offline={planJob.offline} />
               {plan && (
                 <PlanStep
                   plan={plan}
@@ -185,7 +246,15 @@ export function App({ pollMs = 1500 }: { pollMs?: number }) {
           {docJobId && (
             <li className="step">
               <StepTitle id="step-document">{text.steps.document}</StepTitle>
-              <JobStatus job={docJob.job} error={docJob.error} />
+              <JobStatus job={docJob.job} error={docJob.error} offline={docJob.offline} />
+              {cached && (
+                <p className="notice">
+                  {text.cachedNotice(new Date(cached.created_at * 1000).toLocaleDateString("tr-TR"))}{" "}
+                  <button className="link" type="button" onClick={whenIdle(() => startPlan({ ...cached.request, fresh: true }))}>
+                    {text.regenerate}
+                  </button>
+                </p>
+              )}
               {markdown !== null && docJob.job && <DocumentStep job={docJob.job} markdown={markdown} />}
             </li>
           )}

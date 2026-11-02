@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     ip TEXT NOT NULL, status TEXT NOT NULL, stage TEXT, done INTEGER, total INTEGER, request TEXT NOT NULL,
     plan_id TEXT, error TEXT, summary TEXT);
 CREATE INDEX IF NOT EXISTS jobs_queue ON jobs (kind, status, created_at);
+CREATE TABLE IF NOT EXISTS results (key TEXT PRIMARY KEY, job_id TEXT NOT NULL, created_at REAL NOT NULL);
 """
 ACTIVE = ("queued", "running")
 
@@ -50,6 +51,16 @@ class Store:
             (plan_id, time.time(), ip, json.dumps(request), json.dumps(selection)),
         )
         return plan_id
+
+    def remember(self, key: str, job_id: str, now: Optional[float] = None) -> None:
+        self._write(
+            "INSERT OR REPLACE INTO results (key, job_id, created_at) VALUES (?, ?, ?)",
+            (key, job_id, now or time.time()),
+        )
+
+    def recall(self, key: str, max_age: float, now: Optional[float] = None) -> Optional[dict]:
+        self._write("DELETE FROM results WHERE created_at < ?", ((now or time.time()) - max_age,))
+        return self._one("SELECT job_id, created_at FROM results WHERE key = ?", (key,))
 
     def get_plan(self, plan_id: str) -> Optional[dict]:
         row = self._one("SELECT * FROM plans WHERE id = ?", (plan_id,))

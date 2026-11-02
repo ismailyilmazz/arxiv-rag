@@ -15,6 +15,7 @@ class PlanIn(BaseModel):
     seeds: list[str] = Field(default_factory=list, max_length=5)
     focus: Optional[str] = Field(None, max_length=100)
     force: bool = False
+    fresh: bool = False
 
 
 class DocumentIn(BaseModel):

@@ -399,3 +399,55 @@ def test_health_reports_applied_daily_updates(tmp_path, monkeypatch):
     info = client.get("/api/health").json()["data"]
     assert info["papers"] == 107 and info["updated_to"] == "2026-10-27" and info["deltas_applied"] == 2
     assert info["delta_errors"] == ["2026-10-25: bozuk"]
+
+
+def _plan_and_document(app, client, body, removed=()):
+    client.post("/api/plans", json=body)
+    run(app, "plan")
+    plan_id = app.state.store.conn.execute(
+        "SELECT plan_id FROM jobs WHERE kind = 'plan' ORDER BY created_at DESC LIMIT 1"
+    ).fetchone()[0]
+    doc = client.post("/api/documents", json={"plan_id": plan_id, "removed_ids": list(removed)}).json()["job_id"]
+    run(app, "document")
+    return doc
+
+
+def _count(app, sql):
+    return app.state.store.conn.execute(sql).fetchone()[0]
+
+
+CACHE_BODY = {"topic": "Mixture of Experts", "type": "survey", "lang": "en", "seeds": ["2101.03961", "1701.06538"]}
+
+
+def test_the_same_request_gets_the_finished_document_without_a_new_plan(tmp_path):
+    app, client, _ = build(tmp_path)
+    doc = _plan_and_document(app, client, CACHE_BODY)
+    same = {**CACHE_BODY, "topic": "  mixture   of EXPERTS ", "seeds": ["1701.06538", "2101.03961"]}
+    again = client.post("/api/plans", json=same).json()
+    assert again["job_id"] is None and again["cached"]["job_id"] == doc
+    assert client.get(f"/api/jobs/{doc}/document").text.startswith("# Başlık")
+    assert _count(app, "SELECT COUNT(*) FROM jobs WHERE kind = 'plan'") == 1
+    other = client.post("/api/plans", json={**CACHE_BODY, "lang": "tr"}).json()
+    fresh = client.post("/api/plans", json={**CACHE_BODY, "fresh": True}).json()
+    assert other["job_id"] and "cached" not in other and fresh["job_id"] and "cached" not in fresh
+
+
+def test_cached_documents_older_than_thirty_days_are_removed_and_written_again(tmp_path):
+    app, client, _ = build(tmp_path)
+    _plan_and_document(app, client, CACHE_BODY)
+    store = app.state.store
+    store.conn.execute("UPDATE results SET created_at = created_at - 31 * 86400")
+    store.conn.commit()
+    again = client.post("/api/plans", json=CACHE_BODY).json()
+    assert again["job_id"] and "cached" not in again
+    assert _count(app, "SELECT COUNT(*) FROM results") == 0
+
+
+def test_documents_with_removed_sources_or_missing_files_are_not_served_from_cache(tmp_path):
+    app, client, _ = build(tmp_path)
+    _plan_and_document(app, client, CACHE_BODY, removed=["2101.03961"])
+    assert "cached" not in client.post("/api/plans", json=CACHE_BODY).json()
+    app2, client2, _ = build(tmp_path / "second")
+    doc = _plan_and_document(app2, client2, CACHE_BODY)
+    (app2.state.settings.output_dir / f"{doc}.md").unlink()
+    assert "cached" not in client2.post("/api/plans", json=CACHE_BODY).json()

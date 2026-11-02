@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import sys
@@ -55,6 +56,20 @@ def default_runner(settings: Settings) -> Callable:
             cache.close()
 
     return run
+
+
+def result_key(request: dict) -> str:
+    def norm(value) -> str:
+        return " ".join(str(value or "").casefold().split())
+
+    parts = {
+        "topic": norm(request.get("topic")),
+        "type": request.get("type"),
+        "lang": request.get("lang"),
+        "seeds": sorted({s.strip() for s in request.get("seeds") or []}),
+        "focus": norm(request.get("focus")),
+    }
+    return hashlib.sha256(json.dumps(parts, sort_keys=True).encode("utf-8")).hexdigest()
 
 
 def document_paths(output_dir: Path, job_id: str) -> tuple[Path, Path]:
@@ -131,6 +146,8 @@ def create_app(
         md_path.write_text(result["markdown"], encoding="utf-8")
         report = {k: v for k, v in result.items() if k != "markdown"}
         json_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+        if not job["request"].get("removed_ids"):
+            store.remember(result_key(plan["request"]), job["id"])
         return {
             "words": result.get("length", {}).get("words"),
             "cited": len(result.get("cited", [])),
@@ -233,8 +250,23 @@ def create_app(
             "timings_ms": out.get("timings_ms", {}),
         }
 
+    def cached_document(body: PlanIn) -> Optional[dict]:
+        if body.fresh:
+            return None
+        hit = store.recall(result_key(body.model_dump()), settings.result_cache_days * 86400)
+        job = store.get_job(hit["job_id"]) if hit else None
+        if not job or job["status"] != "done":
+            return None
+        if not all(path.exists() for path in document_paths(settings.output_dir, hit["job_id"])):
+            return None
+        return hit
+
     @api.post("/plans", status_code=202)
     def create_plan(body: PlanIn, request: Request):
+        hit = cached_document(body)
+        if hit:
+            log_event("cached", topic=body.topic[:80], type=body.type, lang=body.lang, job_id=hit["job_id"])
+            return {"job_id": None, "position": 0, "cached": hit}
         ip = client_ip(request)
         if store.count_jobs_since("plan", time.time() - 3600, ip) >= settings.plans_per_ip_hour:
             raise HTTPException(429, "Bu saat için plan sınırına ulaştınız. Biraz sonra tekrar deneyin.")

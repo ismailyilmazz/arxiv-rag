@@ -1,8 +1,9 @@
 import type { Job } from "../api/types";
 import { stages, text } from "../strings";
 
-export function JobStatus({ job, error }: { job: Job | null; error: string | null }) {
+export function JobStatus({ job, error, offline = false }: { job: Job | null; error: string | null; offline?: boolean }) {
   if (error) return <p className="notice notice--error" role="alert">{error}</p>;
+  if (offline) return <p className="notice" role="status">{text.offline}</p>;
   if (job?.status === "failed") return <p className="notice notice--error" role="alert">{job.error}</p>;
   if (job?.status === "done") return null;
   const label = !job

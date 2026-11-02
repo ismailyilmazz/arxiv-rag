@@ -55,6 +55,10 @@ export const api = {
   },
 };
 
+export function isTransient(error: unknown): boolean {
+  return !(error instanceof ApiError) || error.status === 0 || error.status === 429 || error.status >= 500;
+}
+
 export function messageOf(error: unknown): string {
   return error instanceof ApiError ? error.message : text.errors.unknown;
 }

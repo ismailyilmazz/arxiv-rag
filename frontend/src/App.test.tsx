@@ -4,6 +4,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
 import { docTypes, stages, text } from "./strings";
+import { armChime, playChime } from "./chime";
+
+vi.mock("./chime", () => ({ armChime: vi.fn(), playChime: vi.fn() }));
 
 const results = ["2101.03961", "1701.06538", "2401.04088", "2202.08906"].map((id, i) => ({
   id,
@@ -66,7 +69,10 @@ function fakeServer(pollsUntilDone = 2, found = results, translated: string | nu
   };
 }
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  window.localStorage.clear();
+});
 
 describe("App", () => {
   it("goes from a topic to a written document", async () => {
@@ -110,6 +116,8 @@ describe("App", () => {
     expect(screen.getByText(text.documentSummary(1234, 2))).toBeInTheDocument();
     expect(screen.getByRole("link", { name: text.downloadMarkdown })).toHaveAttribute("href", "/api/jobs/doc-job/document");
     expect(screen.getByRole("link", { name: text.downloadWord })).toHaveAttribute("href", "/api/jobs/doc-job/document.docx");
+    expect(vi.mocked(playChime).mock.calls).toEqual([["done"], ["done"]]);
+    expect(vi.mocked(armChime)).toHaveBeenCalledTimes(2);
     expect(server.calls.find((c) => c.url === "/api/documents")?.body).toEqual({
       plan_id: "p1", removed_ids: ["1701.06538"],
     });
@@ -118,6 +126,70 @@ describe("App", () => {
     expect(screen.getByLabelText(text.topicQuestion)).toHaveValue("mixture of experts");
     expect(screen.getByLabelText(new RegExp(docTypes.proposal.name))).toBeChecked();
     expect(screen.queryByRole("heading", { name: text.steps.plan })).not.toBeInTheDocument();
+  });
+
+  it("shows a recent document from the cache without planning and can write it again", async () => {
+    const server = fakeServer(1);
+    const base = server.fetch.getMockImplementation()!;
+    let first = true;
+    server.fetch.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === "/api/plans" && first) {
+        first = false;
+        server.calls.push({ url, body: JSON.parse(String(init?.body)) });
+        return new Response(JSON.stringify({ job_id: null, position: 0, cached: { job_id: "doc-job", created_at: 1793500000 } }), { status: 200 });
+      }
+      return base(url, init);
+    });
+    vi.stubGlobal("fetch", server.fetch);
+    const user = userEvent.setup();
+    render(<App pollMs={5} />);
+
+    await user.type(screen.getByLabelText(text.topicQuestion), "mixture of experts");
+    await user.click(screen.getByRole("button", { name: text.search }));
+    await screen.findByText(text.toasts.found(4));
+    await user.click(screen.getByRole("button", { name: text.createPlan }));
+
+    expect(await screen.findByText(text.toasts.cachedDocument)).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: text.downloadWord })).toHaveAttribute("href", "/api/jobs/doc-job/document.docx");
+    expect(screen.queryByRole("heading", { name: text.steps.plan })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: text.steps.document })).toBeInTheDocument();
+    expect(screen.getByText(/aynı istek için üretildi/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: text.regenerate }));
+    expect(await screen.findByText(text.toasts.planAccepted)).toBeInTheDocument();
+    const plans = server.calls.filter((c) => c.url === "/api/plans");
+    expect(plans).toHaveLength(2);
+    expect((plans[1].body as { fresh: boolean }).fresh).toBe(true);
+  });
+
+  it("keeps waiting through a dropped connection and still shows the document", async () => {
+    const server = fakeServer(3);
+    const base = server.fetch.getMockImplementation()!;
+    let drops = 2;
+    server.fetch.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === "/api/jobs/doc-job" && drops > 0) {
+        drops -= 1;
+        throw new TypeError("Failed to fetch");
+      }
+      return base(url, init);
+    });
+    vi.stubGlobal("fetch", server.fetch);
+    window.localStorage.setItem("arxiv-rag:jobs", JSON.stringify({ planJobId: "plan-job", docJobId: "doc-job", cached: null }));
+    render(<App pollMs={5} />);
+
+    expect(await screen.findByText(text.offline)).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: text.downloadWord })).toHaveAttribute("href", "/api/jobs/doc-job/document.docx");
+    expect(screen.queryByText(text.offline)).not.toBeInTheDocument();
+  });
+
+  it("finds the running work again after the page is opened anew", async () => {
+    vi.stubGlobal("fetch", fakeServer(1).fetch);
+    window.localStorage.setItem("arxiv-rag:jobs", JSON.stringify({ planJobId: "plan-job", docJobId: "doc-job", cached: null }));
+    render(<App pollMs={5} />);
+    expect(await screen.findByRole("link", { name: text.downloadWord })).toBeInTheDocument();
+    expect(await screen.findByText(text.planHeading(2, 1))).toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole("button", { name: text.newTopic }));
+    expect(window.localStorage.getItem("arxiv-rag:jobs")).toBeNull();
   });
 
   it("asks before planning a topic the guard rejected", async () => {
