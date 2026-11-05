@@ -4,7 +4,10 @@ from arxiv_rag.generation import gemini, language
 from arxiv_rag.generation.formatting import (
     _citation_numbers,
     drop_repeated_heading,
+    ground_citations,
+    inline_label_lines,
     normalize_citations,
+    repair_tables,
     strip_meta_notes,
     tidy_section,
 )
@@ -352,6 +355,24 @@ def work_line(s: dict) -> str:
     return card_text(s) if s.get("card") else f"[{s['n']}] {s['title']} ({_year(s)}): {s.get('key_sentences', '')}"
 
 
+def setup_others(sources: list[dict], themes: list[dict]) -> list[dict]:
+    return [s for t in themes for s in [x for x in sources if x["id"] in t["ids"] and not x.get("card")][:3]]
+
+
+def allowed_numbers(kind: str, sources: list[dict], themes: list[dict], theme=None) -> set[int]:
+    if kind == "theme":
+        return {s["n"] for s in sources if s["id"] in theme["ids"]}
+    deep = {s["n"] for s in sources if s.get("card")}
+    if kind in ("overview", "brief", "full", "limits"):
+        return deep
+    if kind == "setup":
+        return deep | {s["n"] for s in setup_others(sources, themes)}
+    return set()
+
+
+NO_CITATIONS = "\n- This section is shown no source list: write it without any citation numbers."
+
+
 def material_for(kind: str, sources: list[dict], themes: list[dict], written: list, theme=None) -> str:
     deep = [s for s in sources if s.get("card")]
     so_far = "\n\nWritten so far:\n" + summary_of(written)
@@ -365,8 +386,7 @@ def material_for(kind: str, sources: list[dict], themes: list[dict], written: li
     if kind == "full":
         return "\n\n".join(card_text(s, limit=350) for s in deep) + so_far
     if kind == "setup":
-        others = [s for t in themes for s in [x for x in sources if x["id"] in t["ids"] and not x.get("card")][:3]]
-        lines = "\n".join(work_line(s) for s in others)
+        lines = "\n".join(work_line(s) for s in setup_others(sources, themes))
         return (
             "\n\n".join(card_text(s, ("method", "setup", "findings"), limit=500) for s in deep)
             + ("\n\nOther representative works by theme:\n" + lines if lines else "")
@@ -435,6 +455,7 @@ def write_document(
         )
     progress("sections", 0, len(plan))
     for item in [p for p in plan if not p["last"]] + [p for p in plan if p["last"]]:
+        allowed = allowed_numbers(item["kind"], sources, themes, item["theme"])
         prompt = SECTION_PROMPT.format(
             label=label,
             language="English",
@@ -445,7 +466,7 @@ def write_document(
             material=material_for(item["kind"], sources, themes, written, item["theme"]),
             style=STYLE,
             n=n,
-            extra=DOCUMENT_RULES.format(topic=topic),
+            extra=DOCUMENT_RULES.format(topic=topic) + ("" if allowed else NO_CITATIONS),
         )
         text, tokens, truncated = complete_continued(prompt, model, item["tokens"])
         completed = False
@@ -455,8 +476,10 @@ def write_document(
         text, repeated = drop_repeated_heading(
             text, [item["heading"], item["theme"]["name"] if item["theme"] else None]
         )
+        text, ungrounded = ground_citations(text, allowed)
+        text, tables_fixed = repair_tables(text)
         if lang != "en":
-            text = unbold_labels(text, [s["title"] for s in sources])
+            text = inline_label_lines(unbold_labels(text, [s["title"] for s in sources]))
         used += tokens
         report.append(
             {
@@ -465,8 +488,9 @@ def write_document(
                 "tokens": tokens,
                 "truncated": truncated,
                 "completed": completed,
-                "tidied": tidied or repeated,
+                "tidied": tidied or repeated or tables_fixed,
                 "trimmed": truncated and tidied,
+                "ungrounded": ungrounded,
             }
         )
         texts[item["key"]] = text

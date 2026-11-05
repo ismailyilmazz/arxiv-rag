@@ -94,3 +94,107 @@ def strip_meta_notes(text: str) -> str:
 
 def _citation_numbers(text: str) -> set[int]:
     return {int(n) for group in re.findall(r"\[([\d,\s\u2013-]+)\]", text) for n in re.findall(r"\d+", group)}
+
+
+CITATION = re.compile(r"\[(\d+(?:\s*[,\u2013\-]\s*\d+)*)\]")
+
+
+def citation_numbers(group: str) -> list[int]:
+    out = []
+    for part in re.split(r"\s*,\s*", group):
+        bounds = re.split(r"\s*[\u2013\-]\s*", part)
+        if (
+            len(bounds) == 2
+            and all(b.isdigit() for b in bounds)
+            and int(bounds[0]) <= int(bounds[1]) <= int(bounds[0]) + 50
+        ):
+            out.extend(range(int(bounds[0]), int(bounds[1]) + 1))
+        elif bounds[0].isdigit():
+            out.append(int(bounds[0]))
+    return out
+
+
+def ground_citations(text: str, allowed) -> tuple[str, int]:
+    allowed, removed = set(allowed), 0
+
+    def keep(match):
+        nonlocal removed
+        numbers = citation_numbers(match.group(1))
+        kept = [n for n in numbers if n in allowed]
+        removed += len(numbers) - len(kept)
+        return f"[{', '.join(map(str, kept))}]" if kept else ""
+
+    lines = []
+    for line in text.split("\n"):
+        if line.lstrip().startswith("|") and not _SEPARATOR.match(line):
+            first = CITATION.findall(line.strip().strip("|").split("|")[0])
+            numbers = [n for g in first for n in citation_numbers(g)]
+            if numbers and not any(n in allowed for n in numbers):
+                removed += len(numbers)
+                continue
+        new = CITATION.sub(keep, line)
+        if new != line:
+            new = re.sub(r"[ \t]+([.,;:!?)])", r"\1", new)
+            new = re.sub(r"(?<=\S) {2,}(?=\S)", " ", new)
+        lines.append(new)
+    return "\n".join(lines), removed
+
+
+def _row_key(line: str) -> tuple:
+    first = _cells(line)[0]
+    cited = CITATION.findall(first)
+    return ("cite", tuple(citation_numbers(cited[0]))) if cited else ("text", " ".join(first.split()))
+
+
+def _repair_table(block: list[str]) -> list[str]:
+    if len(block) < 2 or not _SEPARATOR.match(block[1]):
+        return block
+    width, head, rows, seen = len(_cells(block[0])), _row_key(block[0]), [], set()
+    for line in block[2:]:
+        if _SEPARATOR.match(line) or len(_cells(line)) != width:
+            continue
+        key = _row_key(line)
+        if key == head or key in seen:
+            continue
+        seen.add(key)
+        rows.append(line)
+    return [block[0], block[1]] + rows if rows else []
+
+
+def repair_tables(text: str) -> tuple[str, bool]:
+    lines, out, i = text.split("\n"), [], 0
+    while i < len(lines):
+        if not lines[i].lstrip().startswith("|"):
+            out.append(lines[i])
+            i += 1
+            continue
+        j = i
+        while j < len(lines) and lines[j].lstrip().startswith("|"):
+            j += 1
+        out.extend(_repair_table(lines[i:j]))
+        i = j
+    fixed = "\n".join(out)
+    return fixed, fixed != text
+
+
+_LIST_START = re.compile(r"^\s*(?:[-+>|#]|\*\s|\d+[.)]\s)")
+
+
+def _label_line(line: str) -> bool:
+    text = line.strip()
+    return (
+        0 < len(text.split()) <= 8
+        and text[0].isalpha()
+        and not _LIST_START.match(line)
+        and not CITATION.search(text)
+        and text[-1] not in ".!?:;,*"
+    )
+
+
+def inline_label_lines(text: str) -> str:
+    blocks = re.split(r"(\n\s*\n)", text)
+    for k, block in enumerate(blocks):
+        lines = block.split("\n")
+        if len(lines) >= 2 and _label_line(lines[0]) and lines[1].strip() and not _LIST_START.match(lines[1]):
+            blocks[k] = "\n".join([f"{lines[0].strip()}. {lines[1].lstrip()}"] + lines[2:])
+    return "".join(blocks)

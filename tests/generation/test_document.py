@@ -789,7 +789,9 @@ def test_turkish_document_uses_plan_names_keeps_the_english_draft_and_a_glossary
     assert headings["translated"] == headings["of"] == headings["from_plan"] >= 1
     assert "## Tema " in out["markdown"] and "## Theme " not in out["markdown"]
     draft = out["draft"]
-    assert all(s["text"] == "English section text [1]." for s in draft["sections"])
+    texts = {s["key"]: s["text"] for s in draft["sections"]}
+    assert texts["conclusion"] == "English section text."
+    assert set(texts.values()) <= {"English section text [1].", "English section text."}
     assert {s["heading_out"] for s in draft["sections"]} >= {"Giriş", "Sonuç"} and draft["title"] == "Başlık"
     assert draft["glossary"]["section text"] == "bölüm metni" and len(draft["titles"]) == out["screened"]
     translating = [p for p in prompts if p.startswith("Translate the following section")]

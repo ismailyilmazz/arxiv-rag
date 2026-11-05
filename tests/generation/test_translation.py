@@ -444,7 +444,7 @@ def test_gemini_repairs_first_and_groq_is_not_asked_again(monkeypatch):
     text, tokens, _, attempts = translation.translate_section(EN, "survey", "tr", "m", stats=stats)
     assert text == TR and tokens == 100 and attempts == 2 and len(calls) == 1
     assert "every unit into Turkish" in calls[0] and "Unit 1:" in calls[0]
-    assert stats == {"units": 1, "gemini_tried": 1, "gemini_ok": 1, "groq_tried": 0, "groq_ok": 0, "kept": 0}
+    assert stats == {**translation.new_repair_stats(), "units": 1, "gemini_tried": 1, "gemini_ok": 1}
 
 
 def test_gemini_error_falls_back_to_groq(monkeypatch):
@@ -710,3 +710,102 @@ def test_cut_table_is_continued_on_the_next_row(monkeypatch):
     _gemini_continues(monkeypatch, (row, 300, "stop"))
     text, completed, _ = writer.complete_section("TASK", table, 5)
     assert completed and text.splitlines()[3] == row.splitlines()[0] and text.count("\n") == 4
+
+
+TITLES = [
+    "Artificial or Human Intelligence?",
+    "The GPT Surprise: Offering Large Language Model Chat in a Massive Coding Class",
+]
+BACKGROUND = (
+    "The term **artificial intelligence (AI)** now encompasses a spectrum of technologies that range from rule\u2011based "
+    "systems to large language models (LLMs) capable of generating code, explanations, and debugging suggestions.  "
+    "Large language models such as ChatGPT are classified by researchers as \u201cretrieval\u2011augmented generation\u201d "
+    "(RAG) or real\u2011time structured generation systems, and they blur the distinction between a simple coding aid "
+    "and an autonomous problem\u2011solver [1].  Because these models can produce syntactically correct programs with "
+    "minimal prompting, they are reshaping the pedagogical landscape of computer\u2011science education (CSEd) and "
+    "raising questions about how students acquire and demonstrate fundamental cognitive skills [1]."
+)
+BACKGROUND_TR = (
+    "**Yapay zeka (AI)** terimi bugün kural tabanlı sistemlerden kod, açıklama ve hata ayıklama önerileri üretebilen "
+    "büyük dil modellerine (LLM'ler) uzanan bir teknoloji yelpazesini kapsıyor. ChatGPT gibi büyük dil modelleri "
+    "araştırmacılarca \u201cretrieval\u2011augmented generation\u201d (RAG) ya da gerçek zamanlı yapılandırılmış üretim "
+    "sistemleri olarak sınıflandırılıyor ve basit bir kodlama yardımcısı ile özerk bir problem çözücü arasındaki "
+    "ayrımı bulanıklaştırıyor [1]. Bu modeller az yönlendirmeyle sözdizimsel olarak doğru programlar üretebildiği için "
+    "bilgisayar bilimi eğitiminin pedagojik manzarasını yeniden şekillendiriyor ve öğrencilerin temel bilişsel "
+    "becerileri nasıl edindiği ve gösterdiği konusunda soru işaretleri doğuruyor [1]."
+)
+
+
+def _gemini_by_prompt(monkeypatch, answer):
+    from arxiv_rag import config
+    from arxiv_rag.generation import gemini
+
+    calls = []
+
+    def chat(prompt, max_tokens=2000, model="", auth=""):
+        calls.append(prompt)
+        return answer(prompt), 0
+
+    monkeypatch.setattr(config, "GEMINI_API_KEY", "AQ.test")
+    monkeypatch.setattr(gemini, "chat", chat)
+    monkeypatch.setattr(gemini, "status", lambda force=False: {"enabled": True, "ok": True})
+    return calls
+
+
+def test_a_quoted_english_term_no_longer_leaves_the_paragraph_in_english(monkeypatch):
+    _gemini_on(monkeypatch, (BACKGROUND_TR, 300, "stop"))
+    monkeypatch.setattr(llm, "complete", Script(BACKGROUND, BACKGROUND))
+    stats = translation.new_repair_stats()
+    text, *_ = translation.translate_section(BACKGROUND, "survey", "tr", "m", titles=TITLES, stats=stats)
+    assert text == BACKGROUND_TR and stats["kept"] == 0 and stats["gemini_ok"] == 1
+
+
+def test_sentence_by_sentence_rescue_keeps_every_citation_and_title(monkeypatch):
+    import re as regex
+
+    source = "*Artificial or Human Intelligence?* models how the incentive to learn shifts [3]. Adopters of the chat scored higher on the exam [22]."
+
+    def answer(prompt):
+        if "Unit 1:" in prompt:
+            return {"units": [{"id": 1, "text": "Teşvik kayması modellenir."}]}
+        texts = {
+            "1": "\u27e6T1\u27e7 öğrenme teşvikinin nasıl kaydığını modelliyor \u27e62\u27e7.",
+            "2": "Sohbeti kullananlar sınavda daha yüksek puan aldı.",
+        }
+        return {"sentences": [{"id": int(i), "text": texts[i]} for i in regex.findall(r"^(\d+)\. ", prompt, regex.M)]}
+
+    _gemini_by_prompt(monkeypatch, answer)
+    monkeypatch.setattr(llm, "complete", Script(source, "Kısa."))
+    stats = translation.new_repair_stats()
+    text, *_ = translation.translate_section(source, "survey", "tr", "m", titles=TITLES, stats=stats)
+    assert text == (
+        "*Artificial or Human Intelligence?* öğrenme teşvikinin nasıl kaydığını modelliyor [3]. "
+        "Sohbeti kullananlar sınavda daha yüksek puan aldı [22]."
+    )
+    assert stats["sentences_tried"] == stats["sentences_ok"] == 1 and stats["kept"] == 0
+
+
+def test_a_sentence_that_loses_a_title_stays_untouched_rather_than_lose_it(monkeypatch):
+    source = "*Artificial or Human Intelligence?* models how the incentive to learn shifts across students [3]."
+    _gemini_by_prompt(monkeypatch, lambda prompt: {"sentences": [{"id": 1, "text": "Teşvik kayıyor \u27e62\u27e7."}]})
+    text, _, done = translation.translate_sentences(source, "tr", "m", titles=TITLES)
+    assert text == source and not done
+
+
+def test_english_labels_left_in_bold_are_translated_and_titles_are_kept(monkeypatch):
+    text = "**Theoretical incentive analysis.** *Artificial or Human Intelligence?* teşvik kaymasını biçimlendirir [3]."
+    _gemini_by_prompt(monkeypatch, lambda prompt: {"labels": [{"id": 1, "text": "Kuramsal teşvik analizi."}]})
+    stats = translation.new_repair_stats()
+    out, _ = translation.translate_labels(text, "tr", "m", titles=TITLES, stats=stats)
+    assert (
+        out.startswith("**Kuramsal teşvik analizi.** *Artificial or Human Intelligence?* teşvik")
+        and stats["labels_fixed"] == 1
+    )
+
+
+def test_quoted_terms_and_title_fragments_are_not_counted_as_untranslated_labels():
+    text = "Bu modeller \u201cretrieval\u2011augmented generation\u201d olarak anılır; *The GPT Surprise* bunu gösterir [22]."
+    assert translation.english_labels(text, TITLES) == []
+    assert translation.english_labels("**Empirical laboratory evidence** deneyler [21].", TITLES) == [
+        "Empirical laboratory evidence"
+    ]

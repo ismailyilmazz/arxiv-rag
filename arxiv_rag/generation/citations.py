@@ -195,7 +195,8 @@ def number_audit(markdown: str, materials: dict[int, str]) -> dict:
         have = _numbers(materials[n], _NUM_LOOSE)
         for value in _numbers(plain, _NUM_STRICT):
             checked += 1
-            if value not in have:
+            grouped = re.fullmatch(r"\d{1,3}(\.\d{3})+", value)
+            if value not in have and not (grouped and value.replace(".", "") in have):
                 missing += 1
                 if len(examples) < 5:
                     examples.append(f"[{n}] {value}: {' '.join(plain.split())[:160]}")

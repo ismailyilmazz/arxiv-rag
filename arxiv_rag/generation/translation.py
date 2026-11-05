@@ -1,7 +1,7 @@
 import re
 
 from arxiv_rag.generation import gemini, language, llm
-from arxiv_rag.generation.formatting import _citation_numbers, strip_meta_notes, tidy_section
+from arxiv_rag.generation.formatting import CITATION, _citation_numbers, strip_meta_notes, tidy_section
 from arxiv_rag.generation.language import LANGUAGES
 from arxiv_rag.generation.llm import complete_continued
 
@@ -92,11 +92,16 @@ def titles_rule(text: str, titles=()) -> str:
 
 def english_labels(text: str, titles=()) -> list[str]:
     found = protected_titles(text, titles)
+    known = [language.normalize(t) for t in titles if t]
     labels = []
     for match in language.SPAN.finditer(text):
-        span = next(g for g in match.groups() if g)
+        span = match.group(1) or match.group(2)
+        if not span:
+            continue
         norm = language.normalize(span)
         if norm in found or any(t in norm for t in found if len(t) >= 25):
+            continue
+        if len(norm) >= 10 and any(norm in t for t in known):
             continue
         if language.text_is_english(span):
             labels.append(span.strip())
@@ -224,7 +229,17 @@ GEMINI_REPAIR_TOKENS = 8000
 
 
 def new_repair_stats() -> dict:
-    return {"units": 0, "gemini_tried": 0, "gemini_ok": 0, "groq_tried": 0, "groq_ok": 0, "kept": 0}
+    return {
+        "units": 0,
+        "gemini_tried": 0,
+        "gemini_ok": 0,
+        "groq_tried": 0,
+        "groq_ok": 0,
+        "sentences_tried": 0,
+        "sentences_ok": 0,
+        "kept": 0,
+        "labels_fixed": 0,
+    }
 
 
 def _repair_engines() -> tuple:
@@ -274,13 +289,136 @@ def _gemini_batch(blocks: list[str], lang: str, glossary, titles) -> dict:
     return out
 
 
+def _leftover(text: str, glossary, titles) -> int:
+    return len(english_labels(text, titles)) + int(glossary_left(text, glossary, titles))
+
+
 def _accepted(piece: str, block: str, titles) -> bool:
-    return bool(
-        piece
-        and is_complete(piece, block, titles=titles)
-        and not language.block_is_english(piece)
-        and not english_labels(piece, titles)
-    )
+    return bool(piece and is_complete(piece, block, titles=titles) and not language.block_is_english(piece))
+
+
+def _json_batch(engine: str, prompt: str, key: str, model: str) -> tuple[dict, int]:
+    try:
+        if engine == "gemini":
+            data, _ = gemini.chat(prompt, max_tokens=GEMINI_REPAIR_TOKENS)
+            tokens = 0
+        else:
+            data, tokens = llm.chat(prompt, model=model, max_tokens=REPAIR_TOKENS * 2)
+    except Exception:
+        return {}, 0
+    out = {}
+    for row in data.get(key) or [] if isinstance(data, dict) else []:
+        if isinstance(row, dict) and str(row.get("id", "")).isdigit() and isinstance(row.get("text"), str):
+            out[int(row["id"])] = row["text"]
+    return out, tokens
+
+
+SENTENCE_PROMPT = """Translate each numbered sentence below into {language}.
+- Tokens such as \u27e61\u27e7 or \u27e6T1\u27e7 stand for citations and paper titles: copy every token exactly once and
+  unchanged into the translated sentence.
+- Keep markdown such as **bold**, *italics* and list markers. Model names and acronyms may stay in English.{glossary}
+- Translate each sentence on its own: do not merge, split or summarize sentences, and do not add notes.
+Return JSON: {{"sentences": [{{"id": 1, "text": "..."}}]}}
+
+{sentences}"""
+
+_TOKEN = re.compile(r"\u27e6T?\d+\u27e7")
+_SENTENCE_END = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9*\"\u201c(\[])")
+
+
+def _protect(sentence: str, found: set) -> tuple[str, dict]:
+    tokens = {}
+
+    def title(match):
+        span = next(g for g in match.groups() if g)
+        if language.normalize(span) not in found:
+            return match.group(0)
+        key = f"\u27e6T{len(tokens) + 1}\u27e7"
+        tokens[key] = match.group(0)
+        return key
+
+    def cite(match):
+        key = f"\u27e6{len(tokens) + 1}\u27e7"
+        tokens[key] = match.group(0)
+        return key
+
+    return CITATION.sub(cite, language.SPAN.sub(title, sentence)), tokens
+
+
+def _restore(text: str, tokens: dict):
+    missing = [key for key in tokens if key not in text]
+    if any(key.startswith("\u27e6T") for key in missing):
+        return None
+    for key, original in tokens.items():
+        text = text.replace(key, original, 1)
+    if missing:
+        body = text.rstrip()
+        end = re.search(r"[.!?\u2026]+$", body)
+        cites = " ".join(tokens[key] for key in missing)
+        text = f"{body[: end.start()]} {cites}{end.group(0)}" if end else f"{body} {cites}"
+    return text
+
+
+def translate_sentences(block: str, lang: str, model: str, glossary=None, titles=()) -> tuple[str, int, bool]:
+    found = protected_titles(block, titles)
+    lines = [_SENTENCE_END.split(line) for line in block.split("\n")]
+    sentences = [s for parts in lines for s in parts]
+    protected = [_protect(s, found) for s in sentences]
+    todo = [i for i, s in enumerate(sentences) if s.strip() and language.text_is_english(s)]
+    tokens = 0
+    for engine in _repair_engines():
+        if not todo:
+            break
+        listing = "\n".join(f"{k}. {protected[i][0]}" for k, i in enumerate(todo, start=1))
+        prompt = SENTENCE_PROMPT.format(language=LANGUAGES[lang], glossary=glossary_rule(glossary), sentences=listing)
+        mapping, extra = _json_batch(engine, prompt, "sentences", model)
+        tokens += extra
+        left = []
+        for k, i in enumerate(todo, start=1):
+            plain = _TOKEN.sub(" ", mapping.get(k, ""))
+            restored = _restore(mapping[k], protected[i][1]) if mapping.get(k) else None
+            if restored and plain.strip() and not language.text_is_english(plain):
+                sentences[i] = restored
+            else:
+                left.append(i)
+        todo = left
+    out, pos = [], 0
+    for parts in lines:
+        out.append(" ".join(sentences[pos : pos + len(parts)]))
+        pos += len(parts)
+    merged = "\n".join(out)
+    done = merged != block and is_complete(merged, block, titles=titles) and not language.block_is_english(merged)
+    return merged, tokens, done
+
+
+LABEL_PROMPT = """Translate each numbered short phrase into {language}. They are bold or italic labels inside a
+{language} text. Keep acronyms and model names as they are.{glossary}
+Return JSON: {{"labels": [{{"id": 1, "text": "..."}}]}}
+
+{labels}"""
+
+
+def translate_labels(text: str, lang: str, model: str, glossary=None, titles=(), stats=None) -> tuple[str, int]:
+    labels = list(dict.fromkeys(english_labels(text, titles)))
+    tokens = 0
+    for engine in _repair_engines() if lang != "en" and labels else ():
+        listing = "\n".join(f"{k}. {label}" for k, label in enumerate(labels, start=1))
+        prompt = LABEL_PROMPT.format(language=LANGUAGES[lang], glossary=glossary_rule(glossary), labels=listing)
+        mapping, extra = _json_batch(engine, prompt, "labels", model)
+        tokens += extra
+        left = []
+        for k, label in enumerate(labels, start=1):
+            new = " ".join(str(mapping.get(k, "")).split())
+            if new and not language.text_is_english(new) and len(new) <= 2 * len(label) + 20:
+                text = text.replace(f"**{label}**", f"**{new}**").replace(f"*{label}*", f"*{new}*")
+                if stats is not None:
+                    stats["labels_fixed"] += 1
+            else:
+                left.append(label)
+        labels = left
+        if not labels:
+            break
+    return text, tokens
 
 
 def repair_paragraphs(
@@ -304,6 +442,7 @@ def repair_paragraphs(
         prompt = RETRY_TRANSLATE_PROMPT.format(
             language=LANGUAGES[lang], text=block, glossary=glossary_rule(glossary), titles=titles_rule(block, titles)
         )
+        english, before, chosen = language.block_is_english(block), _leftover(block, glossary, titles), None
         for engine in engines:
             stats[f"{engine}_tried"] += 1
             if engine == "gemini":
@@ -312,10 +451,23 @@ def repair_paragraphs(
                 piece, extra = _repair_call(engine, prompt, model)
                 tokens += extra
             piece = fix_tables(strip_meta_notes(piece.strip()), block, lang)
-            if _accepted(piece, block, titles) and not glossary_left(piece, glossary, titles):
-                blocks[i], repaired = piece, repaired + 1
-                stats[f"{engine}_ok"] += 1
+            if not _accepted(piece, block, titles):
+                continue
+            left = _leftover(piece, glossary, titles)
+            if chosen is None or left < chosen[2]:
+                chosen = (piece, engine, left)
+            if left == 0:
                 break
+        if chosen and not english and chosen[2] >= before:
+            chosen = None
+        if chosen is None and english and not block.lstrip().startswith("|"):
+            stats["sentences_tried"] += 1
+            piece, extra, done = translate_sentences(block, lang, model, glossary, titles)
+            tokens += extra
+            chosen = (piece, "sentences", 0) if done else None
+        if chosen:
+            blocks[i], repaired = chosen[0], repaired + 1
+            stats[f"{chosen[1]}_ok"] += 1
         else:
             failed += 1
             stats["kept"] += 1
@@ -339,16 +491,17 @@ def translate_section(
     out = strip_meta_notes(out)
     if lang == "en":
         return out, tokens, truncated, 1
-    out = fix_tables(out, text, lang)
+    out, attempts = fix_tables(out, text, lang), 1
     if truncated or not is_complete(out, text, titles=titles):
         out, extra, _, _ = repair_paragraphs(
             text, lang, model, tables=True, glossary=glossary, titles=titles, stats=stats
         )
-        return out, tokens + extra, False, 2
-    if language.has_english(out) or english_labels(out, titles) or glossary_left(out, glossary, titles):
+        tokens, truncated, attempts = tokens + extra, False, 2
+    elif language.has_english(out) or english_labels(out, titles) or glossary_left(out, glossary, titles):
         out, extra, repaired, _ = repair_paragraphs(out, lang, model, glossary=glossary, titles=titles, stats=stats)
-        return out, tokens + extra, truncated, 2 if repaired else 1
-    return out, tokens, truncated, 1
+        tokens, attempts = tokens + extra, 2 if repaired else 1
+    out, extra = translate_labels(out, lang, model, glossary, titles, stats)
+    return out, tokens + extra, truncated, attempts
 
 
 def _heading_lines(text: str) -> list[str]:
