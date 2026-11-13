@@ -2,6 +2,7 @@ import hashlib
 import json
 import math
 import os
+import secrets
 import sys
 import threading
 import time
@@ -175,11 +176,19 @@ def create_app(
     if settings.preload:
         threading.Thread(target=loaded, name="preload", daemon=True).start()
 
+    salt = secrets.token_hex(16)
+
+    def tag(value: str) -> str:
+        return hashlib.sha256(f"{salt}{value}".encode("utf-8")).hexdigest()[:8]
+
+    def forwarded_hops(request: Request) -> list[str]:
+        forwarded = request.headers.get("x-forwarded-for") or ""
+        return [part.strip() for part in forwarded.split(",") if part.strip()]
+
     def client_ip(request: Request) -> str:
-        forwarded = request.headers.get("x-forwarded-for")
-        hops = [part.strip() for part in (forwarded or "").split(",") if part.strip()]
+        hops = forwarded_hops(request)
         if settings.trust_proxy and hops:
-            return hops[-1]
+            return hops[-min(max(settings.proxy_hops, 1), len(hops))]
         return request.client.host if request.client else "unknown"
 
     def check_input(ip: str, required: Optional[str] = None, *optional: Optional[str]) -> None:
@@ -217,7 +226,7 @@ def create_app(
     api = APIRouter(prefix="/api")
 
     @api.get("/health")
-    def health():
+    def health(request: Request):
         return {
             "status": "ok",
             "build": build_info(),
@@ -229,6 +238,11 @@ def create_app(
                 "plans_per_ip_hour": settings.plans_per_ip_hour,
                 "documents_per_ip_day": settings.generations_per_ip_day,
                 "documents_per_day": settings.generations_per_day,
+            },
+            "client": {
+                "forwarded": [tag(hop) for hop in forwarded_hops(request)],
+                "key": tag(client_ip(request)),
+                "proxy_hops": settings.proxy_hops,
             },
         }
 

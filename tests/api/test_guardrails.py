@@ -134,3 +134,25 @@ def test_strikes_and_bans_expire(tmp_path):
     store.ban("ip", until=2000.0)
     assert store.banned_until("ip", now=1500.0) == 2000.0
     assert store.banned_until("ip", now=2500.0) is None
+
+
+def test_behind_two_proxies_the_ban_falls_on_the_user_and_never_on_a_shared_edge(tmp_path):
+    app, client, _ = build(tmp_path, trust_proxy=True, proxy_hops=2)
+    for k, spoof in enumerate(("1.1.1.1", "2.2.2.2", "3.3.3.3")):
+        client.post(
+            "/api/search", json={"query": "yarrak"}, headers={"X-Forwarded-For": f"{spoof}, 9.9.9.9, 10.0.0.{k}"}
+        )
+
+    def legit(header):
+        return client.post("/api/search", json={"query": "mixture of experts"}, headers={"X-Forwarded-For": header})
+
+    assert legit("9.9.9.9, 10.0.0.8").status_code == legit("9.9.9.9").status_code == 403
+    assert legit("7.7.7.7, 10.0.0.0").status_code == legit("1.1.1.1, 10.0.0.1").status_code == 200
+
+
+def test_health_shows_the_forwarding_chain_without_revealing_any_address(tmp_path):
+    app, client, _ = build(tmp_path, trust_proxy=True, proxy_hops=2)
+    response = client.get("/api/health", headers={"X-Forwarded-For": "1.1.1.1, 9.9.9.9, 10.0.0.1"})
+    info = response.json()["client"]
+    assert len(info["forwarded"]) == 3 and info["key"] == info["forwarded"][1] and info["proxy_hops"] == 2
+    assert not any(ip in response.text for ip in ("1.1.1.1", "9.9.9.9", "10.0.0.1"))

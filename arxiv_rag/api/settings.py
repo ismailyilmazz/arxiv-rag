@@ -32,6 +32,7 @@ class Settings:
     ban_strikes: int = 3
     ban_hours: int = 24
     trust_proxy: bool = False
+    proxy_hops: int = 1
     preload: bool = False
 
     @classmethod
@@ -53,5 +54,6 @@ class Settings:
             ban_strikes=_int("APP_BAN_STRIKES", 3),
             ban_hours=_int("APP_BAN_HOURS", 24),
             trust_proxy=os.getenv("APP_TRUST_PROXY", "0") == "1",
+            proxy_hops=_int("APP_PROXY_HOPS", 1),
             preload=os.getenv("APP_PRELOAD", "0") == "1",
         )
