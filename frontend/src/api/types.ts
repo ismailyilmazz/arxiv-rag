@@ -60,6 +60,7 @@ export interface PlanPaper {
   title: string;
   relevance: number | null;
   deep: boolean;
+  seed?: boolean;
   url: string;
 }
 

@@ -18,7 +18,14 @@ const plan: Plan = {
       name: "Routing",
       size: 2,
       papers: [
-        { id: "2101.03961", title: "Switch Transformers", relevance: 0.95, deep: true, url: "https://arxiv.org/abs/2101.03961" },
+        {
+          id: "2101.03961",
+          title: "Switch Transformers",
+          relevance: 0.95,
+          deep: true,
+          seed: true,
+          url: "https://arxiv.org/abs/2101.03961",
+        },
         { id: "2401.04088", title: "Mixtral of Experts", relevance: 0.92, deep: false, url: "https://arxiv.org/abs/2401.04088" },
       ],
     },
@@ -41,6 +48,7 @@ describe("PlanStep", () => {
     expect(screen.getByText(text.planHeading(2, 1))).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Routing" })).toBeInTheDocument();
     expect(screen.getAllByText(text.deep)).toHaveLength(1);
+    expect(screen.getAllByText(text.seed)).toHaveLength(1);
     expect(screen.getByRole("link", { name: "A Survey on MoE" })).toHaveAttribute("target", "_blank");
     expect(screen.getByText(text.dropped(1))).toBeInTheDocument();
   });

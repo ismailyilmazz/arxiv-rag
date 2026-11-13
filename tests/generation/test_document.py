@@ -134,6 +134,28 @@ def test_off_topic_cluster_is_dropped_and_order_is_followed(monkeypatch):
     assert [t["name"] for t in themes] == ["Second", "Kept"]
 
 
+def test_an_off_topic_cluster_keeps_only_the_papers_the_user_chose(monkeypatch):
+    monkeypatch.setattr(
+        llm,
+        "chat",
+        lambda prompt, model, **kw: (
+            {
+                "themes": [
+                    {"cluster": 0, "name": "Kept", "description": "", "off_topic": False},
+                    {"cluster": 1, "name": "Noise", "description": "", "off_topic": True},
+                ],
+                "order": [0, 1],
+            },
+            5,
+        ),
+    )
+    titles = {"a": "A", "b": "B", "c": "C"}
+    themes, _ = document.name_themes("t", ["a", "b", "c"], np.array([0, 1, 1]), titles, "m", keep=["b"])
+    assert [(t["name"], t["ids"]) for t in themes] == [("Kept", ["a"]), ("Noise", ["b"])]
+    themes, _ = document.name_themes("t", ["a", "b", "c"], np.array([0, 1, 1]), titles, "m")
+    assert [t["name"] for t in themes] == ["Kept"]
+
+
 def test_cluster_handles_tiny_input():
     assert document.cluster(np.eye(3, dtype=np.float32)).tolist() == [0, 0, 0]
 
@@ -631,6 +653,8 @@ def test_selection_survives_json_and_removed_sources_are_not_written(tmp_path, m
     selection = document.select_sources(conn, pipeline, "experts", "synthesis", seed_ids=[A[0]], n_sources=8)
     selection = json.loads(json.dumps(selection))
     view = document.plan_view(selection)
+    marked = {p["id"]: p["seed"] for t in view["themes"] for p in t["papers"]}
+    assert marked.get(selection["seeds"][0]) is True and sum(marked.values()) == len(selection["seeds"])
     assert view["dry_run"] and sum(t["size"] for t in view["themes"]) == view["screened"]
     victim = next(pid for t in selection["themes"] for pid in t["ids"] if pid != A[0])
     stages = []

@@ -317,7 +317,7 @@ def _best_kmeans(vectors: np.ndarray, k_range: tuple[int, int], seed: int) -> np
 
 
 def name_themes(
-    topic: str, ids: list[str], labels: np.ndarray, titles: dict[str, str], model: str, lang: str = "en"
+    topic: str, ids: list[str], labels: np.ndarray, titles: dict[str, str], model: str, lang: str = "en", keep=()
 ) -> tuple[list[dict], int]:
     clusters = "\n".join(
         f"Cluster {c}:\n"
@@ -339,19 +339,22 @@ def name_themes(
     flagged = {
         ids[int(n) - 1] for n in data.get("off_topic_papers") or [] if str(n).isdigit() and 1 <= int(n) <= len(ids)
     }
-    themes = []
+    themes, keep = [], set(keep)
     for c in dict.fromkeys(order):
         t = named.get(c, {})
+        members = [pid for pid, lab in zip(ids, labels) if lab == c]
         if t.get("off_topic"):
-            continue
+            members = [pid for pid in members if pid in keep]
+            if not members:
+                continue
         themes.append(
             {
                 "cluster": c,
                 "name": str(t.get("name") or f"Theme {c + 1}").strip(),
                 "name_local": str(t.get("name_local") or "").strip() if local else "",
                 "description": str(t.get("description") or "").strip(),
-                "ids": [pid for pid, lab in zip(ids, labels) if lab == c],
-                "off_topic_ids": [pid for pid, lab in zip(ids, labels) if lab == c and pid in flagged],
+                "ids": members,
+                "off_topic_ids": [pid for pid in members if pid in flagged],
             }
         )
     return themes, tokens
@@ -504,7 +507,9 @@ def select_sources(
     for pid in ids:
         titles.setdefault(pid, conn.execute("SELECT title FROM papers WHERE id = ?", (pid,)).fetchone()[0])
     labels = merge_small(cluster(vectors), vectors)
-    themes, tokens["themes"] = name_themes(subject, ids, labels, {pid: titles[pid] for pid in ids}, write_model, lang)
+    themes, tokens["themes"] = name_themes(
+        subject, ids, labels, {pid: titles[pid] for pid in ids}, write_model, lang, keep=seeds
+    )
     flagged = [pid for t in themes for pid in t.get("off_topic_ids", []) if pid not in seeds]
     off_topic = set(sorted(flagged, key=lambda p: on_topic_scores.get(p, 0.0))[: max(1, len(ids) // 4)])
     themes = [{**t, "ids": [p for p in t["ids"] if p not in off_topic]} for t in themes]
@@ -589,7 +594,13 @@ def plan_view(selection: dict) -> dict:
                 "name_en": t["name"],
                 "size": len(t["ids"]),
                 "papers": [
-                    {"id": pid, "title": title(pid, ""), "relevance": rel(pid), "deep": pid in selection["deep"]}
+                    {
+                        "id": pid,
+                        "title": title(pid, ""),
+                        "relevance": rel(pid),
+                        "deep": pid in selection["deep"],
+                        "seed": pid in selection.get("seeds", ()),
+                    }
                     for pid in t["ids"]
                 ],
             }

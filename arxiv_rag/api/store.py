@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS jobs (
     plan_id TEXT, error TEXT, summary TEXT);
 CREATE INDEX IF NOT EXISTS jobs_queue ON jobs (kind, status, created_at);
 CREATE TABLE IF NOT EXISTS results (key TEXT PRIMARY KEY, job_id TEXT NOT NULL, created_at REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS strikes (ip TEXT NOT NULL, at REAL NOT NULL, reason TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS bans (ip TEXT PRIMARY KEY, until REAL NOT NULL);
 """
 ACTIVE = ("queued", "running")
 
@@ -51,6 +53,20 @@ class Store:
             (plan_id, time.time(), ip, json.dumps(request), json.dumps(selection)),
         )
         return plan_id
+
+    def strike(self, ip: str, reason: str, window: float, now: Optional[float] = None) -> int:
+        now = now or time.time()
+        self._write("DELETE FROM strikes WHERE at < ?", (now - window,))
+        self._write("INSERT INTO strikes (ip, at, reason) VALUES (?, ?, ?)", (ip, now, reason))
+        return self._one("SELECT COUNT(*) AS n FROM strikes WHERE ip = ?", (ip,))["n"]
+
+    def ban(self, ip: str, until: float) -> None:
+        self._write("INSERT OR REPLACE INTO bans (ip, until) VALUES (?, ?)", (ip, until))
+
+    def banned_until(self, ip: str, now: Optional[float] = None) -> Optional[float]:
+        self._write("DELETE FROM bans WHERE until < ?", (now or time.time(),))
+        row = self._one("SELECT until FROM bans WHERE ip = ?", (ip,))
+        return row["until"] if row else None
 
     def remember(self, key: str, job_id: str, now: Optional[float] = None) -> None:
         self._write(

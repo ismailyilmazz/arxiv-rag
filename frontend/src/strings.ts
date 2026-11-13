@@ -61,6 +61,7 @@ export const text = {
   showSources: "Kaynakları göster",
   edit: "Düzenle",
   deep: "Tam metinden okunacak",
+  seed: "Senin seçimin",
   relevance: "Konuya yakınlık",
   furtherReading: "İleri okuma",
   furtherReadingHint: "Belgede atıflanmaz, kaynakçanın sonunda listelenir.",

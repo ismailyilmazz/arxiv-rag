@@ -52,6 +52,7 @@ export function PlanStep({ plan, removed, collapsed, onToggle, onWrite }: Props)
                     <p className="paper__meta">
                       {paper.id}
                       {paper.deep && <span className="paper__deep"> {text.deep}</span>}
+                      {paper.seed && <span className="paper__seed"> {text.seed}</span>}
                     </p>
                     <span
                       className="relevance"

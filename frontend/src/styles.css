@@ -371,6 +371,11 @@ legend {
   font-weight: 500;
 }
 
+.paper__seed {
+  color: var(--carmine);
+  font-weight: 500;
+}
+
 .paper--removed .paper__title,
 .paper--removed .paper__meta {
   color: var(--graphite);

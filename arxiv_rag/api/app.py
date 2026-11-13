@@ -1,5 +1,6 @@
 import hashlib
 import json
+import math
 import os
 import sys
 import threading
@@ -12,6 +13,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from arxiv_rag import config
+from arxiv_rag.api import guardrails
 from arxiv_rag.api.schemas import DocumentIn, PlanIn, SearchIn
 from arxiv_rag.api.settings import Settings
 from arxiv_rag.api.store import Store
@@ -24,6 +26,10 @@ from arxiv_rag.storage.deltas import read_summary
 from arxiv_rag.storage.tex import clean_authors, clean_tex
 
 DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+
+BANNED = "Kötüye kullanım nedeniyle bu bağlantıdan erişim yaklaşık {hours} saatliğine engellendi."
+WARNING = "Kötüye kullanım tekrarlanırsa erişimin geçici olarak engellenir (kalan hak: {left})."
 
 
 def default_pipeline(conn, settings: Settings):
@@ -171,9 +177,31 @@ def create_app(
 
     def client_ip(request: Request) -> str:
         forwarded = request.headers.get("x-forwarded-for")
-        if settings.trust_proxy and forwarded:
-            return forwarded.split(",")[0].strip()
+        hops = [part.strip() for part in (forwarded or "").split(",") if part.strip()]
+        if settings.trust_proxy and hops:
+            return hops[-1]
         return request.client.host if request.client else "unknown"
+
+    def check_input(ip: str, required: Optional[str] = None, *optional: Optional[str]) -> None:
+        until = store.banned_until(ip)
+        if until:
+            raise HTTPException(403, detail=BANNED.format(hours=max(1, math.ceil((until - time.time()) / 3600))))
+        texts = ([required] if required is not None else []) + [t for t in optional if t]
+        for text in texts:
+            reason = guardrails.screen(text)
+            if not reason:
+                continue
+            log_event("blocked", reason=reason)
+            if reason not in guardrails.ABUSE:
+                raise HTTPException(422, detail=guardrails.MESSAGES[reason])
+            window = settings.ban_hours * 3600
+            count = store.strike(ip, reason, window)
+            if count >= settings.ban_strikes:
+                store.ban(ip, time.time() + window)
+                log_event("banned", strikes=count)
+                raise HTTPException(403, detail=BANNED.format(hours=settings.ban_hours))
+            left = settings.ban_strikes - count
+            raise HTTPException(422, detail=f"{guardrails.MESSAGES[reason]} {WARNING.format(left=left)}")
 
     def enqueue(kind: str, ip: str, request: dict, plan_id: Optional[str] = None) -> dict:
         job_id = store.add_job(kind, ip, request, plan_id)
@@ -205,7 +233,8 @@ def create_app(
         }
 
     @api.post("/search")
-    def search(body: SearchIn):
+    def search(body: SearchIn, request: Request):
+        check_input(client_ip(request), body.query)
         conn, pipeline = loaded()
         with lock:
             out = pipeline.search(body.query, k=body.k)
@@ -263,6 +292,7 @@ def create_app(
 
     @api.post("/plans", status_code=202)
     def create_plan(body: PlanIn, request: Request):
+        check_input(client_ip(request), body.topic, body.focus)
         hit = cached_document(body)
         if hit:
             log_event("cached", topic=body.topic[:80], type=body.type, lang=body.lang, job_id=hit["job_id"])
@@ -289,6 +319,7 @@ def create_app(
 
     @api.post("/documents", status_code=202)
     def create_document(body: DocumentIn, request: Request):
+        check_input(client_ip(request))
         if not store.get_plan(body.plan_id):
             raise HTTPException(404, "Plan bulunamadı.")
         ip, day = client_ip(request), time.time() - 86400

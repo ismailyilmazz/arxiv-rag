@@ -29,6 +29,8 @@ class Settings:
     generations_per_day: int = 5
     document_workers: int = 2
     result_cache_days: int = 30
+    ban_strikes: int = 3
+    ban_hours: int = 24
     trust_proxy: bool = False
     preload: bool = False
 
@@ -48,6 +50,8 @@ class Settings:
             generations_per_day=_int("APP_GENERATIONS_PER_DAY", 5),
             document_workers=_int("APP_DOCUMENT_WORKERS", 2),
             result_cache_days=_int("APP_RESULT_CACHE_DAYS", 30),
+            ban_strikes=_int("APP_BAN_STRIKES", 3),
+            ban_hours=_int("APP_BAN_HOURS", 24),
             trust_proxy=os.getenv("APP_TRUST_PROXY", "0") == "1",
             preload=os.getenv("APP_PRELOAD", "0") == "1",
         )
